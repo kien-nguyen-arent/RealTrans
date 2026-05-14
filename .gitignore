@@ -1,0 +1,60 @@
+# ── AI tooling ────────────────────────────────────────────────────────────────
+.claude/
+CLAUDE.md
+AGENTS.md
+
+# ── .NET build output ─────────────────────────────────────────────────────────
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+project.lock.json
+project.fragment.lock.json
+
+# ── NuGet ─────────────────────────────────────────────────────────────────────
+*.nupkg
+*.snupkg
+**/[Pp]ackages/
+*.nuget.props
+*.nuget.targets
+
+# ── Visual Studio ─────────────────────────────────────────────────────────────
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.sln.DotSettings
+*.rsuser
+*_wpftmp.csproj
+*.binlog
+
+# ── Rider / JetBrains ─────────────────────────────────────────────────────────
+.idea/
+*.sln.iml
+
+# ── VS Code ───────────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+python/
+models/
+
+# ── Node ──────────────────────────────────────────────────────────────────────
+node_modules/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ── Frontend dev assets (screenshots not needed in deployed wwwroot) ──────────
+**/wwwroot/screenshots/

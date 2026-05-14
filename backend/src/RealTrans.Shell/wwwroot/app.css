@@ -1,0 +1,197 @@
+/* ─────────────────────────────────────────────────────────────────
+   RealTrans — base tokens + global styles
+   Premium minimal: dark, glassy, monochrome with violet/amber accents.
+   Inspired by Arc, Raycast, Linear, Apple HIG.
+   ───────────────────────────────────────────────────────────────── */
+
+:root {
+  /* mono scale */
+  --rt-bg: #0a0a0c;
+  --rt-bg-2: #111114;
+  --rt-bg-3: #18181c;
+  --rt-glass: rgba(20, 21, 26, 0.72);
+  --rt-glass-hi: rgba(28, 30, 36, 0.86);
+  --rt-line: rgba(255, 255, 255, 0.07);
+  --rt-line-2: rgba(255, 255, 255, 0.12);
+  --rt-line-hi: rgba(255, 255, 255, 0.22);
+
+  --rt-fg: #f4f4f5;
+  --rt-fg-2: rgba(244, 244, 245, 0.72);
+  --rt-fg-3: rgba(244, 244, 245, 0.48);
+  --rt-fg-4: rgba(244, 244, 245, 0.32);
+
+  /* accent — translation violet (the "RT" brand color) */
+  --rt-accent: #8b7cff;
+  --rt-accent-bright: #a899ff;
+  --rt-accent-deep: #5d4ce0;
+  --rt-accent-glow: rgba(139, 124, 255, 0.32);
+
+  /* mode accents (gamer/manga = themed, never default) */
+  --rt-cyan: #5eead4;
+  --rt-amber: #f5b75e;
+  --rt-rose: #f471a8;
+  --rt-mint: #6ee7a8;
+
+  --rt-radius: 12px;
+  --rt-radius-sm: 8px;
+  --rt-radius-lg: 18px;
+
+  --rt-shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.4);
+  --rt-shadow-2: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 16px 48px rgba(0, 0, 0, 0.5);
+  --rt-shadow-pop: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 24px 64px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  --rt-blur: blur(28px) saturate(180%);
+  --rt-blur-strong: blur(40px) saturate(200%);
+
+  --rt-font: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --rt-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --rt-jp: "Noto Sans JP", "Noto Serif JP", "Geist", sans-serif;
+  --rt-jp-serif: "Noto Serif JP", serif;
+
+  --rt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --rt-ease-2: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  font-family: var(--rt-font);
+  color: var(--rt-fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+#root { height: 100%; width: 100%; }
+
+button { font-family: inherit; }
+
+/* ── Stage that frames the simulated desktop ─────────────────────── */
+
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(1200px 800px at 50% -10%, #1a1726 0%, #050507 60%, #000 100%);
+  overflow: hidden;
+}
+
+.stage-main {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.stage::before {
+  /* subtle grain */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.06;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' /></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+.desktop {
+  position: relative;
+  width: 100%;
+  max-width: 1440px;
+  aspect-ratio: 16 / 10;
+  max-height: 100%;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #0c0c10;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.07),
+    0 40px 120px rgba(0, 0, 0, 0.7),
+    0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── shared glass surface ────────────────────────────────────────── */
+.glass {
+  background: var(--rt-glass);
+  -webkit-backdrop-filter: var(--rt-blur);
+  backdrop-filter: var(--rt-blur);
+  border: 0.5px solid var(--rt-line-2);
+  border-radius: var(--rt-radius);
+  box-shadow: var(--rt-shadow-1);
+}
+
+.glass-strong {
+  background: var(--rt-glass-hi);
+  -webkit-backdrop-filter: var(--rt-blur-strong);
+  backdrop-filter: var(--rt-blur-strong);
+  border: 0.5px solid var(--rt-line-2);
+  border-radius: var(--rt-radius);
+  box-shadow: var(--rt-shadow-2);
+}
+
+.mono { font-family: var(--rt-mono); font-feature-settings: "ss01"; }
+
+/* ── Reusable kbd chip ───────────────────────────────────────────── */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-family: var(--rt-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--rt-fg-2);
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid var(--rt-line-2);
+  border-bottom-width: 1px;
+  border-radius: 5px;
+  letter-spacing: 0.02em;
+}
+
+/* selection cursor */
+.sel-cursor { cursor: crosshair; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 6px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); background-clip: content-box; }
+
+/* keyframes used throughout */
+@keyframes rt-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rt-pop-in { from { opacity: 0; transform: translateY(4px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes rt-glow-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,124,255,0); } 50% { box-shadow: 0 0 0 6px rgba(139,124,255,0.18); } }
+@keyframes rt-scan {
+  0% { transform: translateY(-100%); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+@keyframes rt-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+@keyframes rt-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* shimmer used during OCR detection */
+.shimmer-text {
+  background: linear-gradient(90deg, var(--rt-fg-3) 0%, var(--rt-fg) 50%, var(--rt-fg-3) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: rt-shimmer 1.6s linear infinite;
+}
+
+/* focusable */
+:focus-visible { outline: 2px solid var(--rt-accent); outline-offset: 2px; border-radius: 6px; }

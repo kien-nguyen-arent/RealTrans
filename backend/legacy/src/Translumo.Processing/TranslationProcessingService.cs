@@ -27,6 +27,12 @@ namespace Translumo.Processing
     {
         public bool IsStarted => !_ctSource?.IsCancellationRequested ?? false;
 
+        /// <summary>When set (>0), overrides internal polling delay logic. Used by RealTrans scenario profiles.</summary>
+        public int IterationDelayOverrideMs { get; set; } = -1;
+
+        /// <summary>Region ID forwarded to ITranslationResultSink.SendRegionResult when available.</summary>
+        public string RegionId { get; set; } = string.Empty;
+
         private readonly ICapturerFactory _capturerFactory;
         private readonly IChatTextMediator _chatTextMediator;
         private readonly OcrEnginesFactory _enginesFactory;
@@ -330,17 +336,25 @@ namespace Translumo.Processing
 
         private async Task TranslateTextAsync(string text, Guid iterationId)
         {
+            var started = DateTime.UtcNow;
             var translation = await _translator.TranslateTextAsync(text);
             if (!string.IsNullOrWhiteSpace(translation) && !_textResultCacheService.IsTranslatedCached(translation, iterationId))
             {
+                var elapsed = DateTime.UtcNow - started;
                 Interlocked.Exchange(ref _lastTranslatedTextTicks, DateTime.UtcNow.Ticks);
-                _chatTextMediator.SendText(translation, true);
+                if (_chatTextMediator is Interfaces.ITranslationResultSink sink && !string.IsNullOrEmpty(RegionId))
+                    sink.SendRegionResult(RegionId, text, translation, elapsed);
+                else
+                    _chatTextMediator.SendText(translation, true);
                 _ttsEngine.SpeechText(translation);
             }
         }
 
         private int GetIterationDelayMs(IterationType lastIterationType, bool withSequentialText)
         {
+            if (IterationDelayOverrideMs > 0)
+                return IterationDelayOverrideMs;
+
             if (withSequentialText)
             {
                 return 620;
