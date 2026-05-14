@@ -23,7 +23,6 @@ const App = () => {
   const [subtitleIndex, setSubtitleIndex] = useState(0);
   const [activeSpeaker, setActiveSpeaker] = useState("yuki");
   const [captionIndex, setCaptionIndex] = useState(0);
-  const [time, setTime] = useState("21:08");
 
   // live tick for subtitle/caption advance
   useEffect(() => {
@@ -45,17 +44,6 @@ const App = () => {
       return () => clearInterval(id);
     }
   }, [scenarioId, t.autoCycleSubs]);
-
-  // clock
-  useEffect(() => {
-    const tick = () => {
-      const d = new Date();
-      setTime(`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`);
-    };
-    tick();
-    const id = setInterval(tick, 30000);
-    return () => clearInterval(id);
-  }, []);
 
   // global keyboard
   useEffect(() => {
@@ -133,13 +121,7 @@ const App = () => {
       </div>
 
       <div className="stage-main">
-        <Desktop
-        scenario={SCENARIOS[scenarioId]}
-        scenarioId={scenarioId}
-        time={time}
-        onTaskbarTranslate={() => setPaletteOpen(true)}
-        palettOpen={paletteOpen}
-      >
+        <Desktop scenarioId={scenarioId}>
         {/* the actual scenario */}
         {renderScene()}
 
