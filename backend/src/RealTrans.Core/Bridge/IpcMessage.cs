@@ -63,6 +63,16 @@ namespace RealTrans.Core.Bridge
         public override string Type => "overlay:update";
     }
 
+    public record SelectionCommittedMessage(RectDto Rect) : OutboundMessage
+    {
+        public override string Type => "selection:committed";
+    }
+
+    public record SelectionCancelledMessage() : OutboundMessage
+    {
+        public override string Type => "selection:cancelled";
+    }
+
     public record SettingsSnapshotMessage(object Settings) : OutboundMessage
     {
         public override string Type => "settings:snapshot";

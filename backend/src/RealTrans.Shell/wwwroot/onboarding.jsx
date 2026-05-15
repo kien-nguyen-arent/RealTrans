@@ -7,7 +7,7 @@ const Onboarding = ({ open, onClose }) => {
   const [step, setStep] = useState(0);
   const [src, setSrc] = useState("ja");
   const [dst, setDst] = useState("en");
-  const [hotkey, setHotkey] = useState("⌃⌥Space");
+  const [hotkey, setHotkey] = useState("AltQ");
 
   useEffect(() => { if (open) setStep(0); }, [open]);
 
@@ -232,9 +232,8 @@ const OnbStep2 = () => (
         </div>
       </div>
       <div style={{ display: "flex", gap: 4 }}>
-        <span className="kbd" style={{ fontSize: 12, padding: "4px 8px", height: 26 }}>⌃</span>
-        <span className="kbd" style={{ fontSize: 12, padding: "4px 8px", height: 26 }}>⌥</span>
-        <span className="kbd" style={{ fontSize: 12, padding: "4px 8px", height: 26 }}>Space</span>
+        <span className="kbd" style={{ fontSize: 12, padding: "4px 8px", height: 26 }}>Alt</span>
+        <span className="kbd" style={{ fontSize: 12, padding: "4px 8px", height: 26 }}>Q</span>
       </div>
     </div>
 

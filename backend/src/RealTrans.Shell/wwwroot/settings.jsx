@@ -279,13 +279,13 @@ const AppearancePane = () => (
 
 const HotkeysPane = () => {
   const keys = [
-    { name: "Activate RealTrans", k: ["⌃", "⌥", "Space"] },
+    { name: "Activate RealTrans", k: ["Alt", "Q"] },
     { name: "Translate active window", k: ["⌃", "⌥", "W"] },
     { name: "Toggle pinned region", k: ["⌃", "⌥", "P"] },
     { name: "Cycle overlay style", k: ["⌃", "⌥", "O"] },
     { name: "Pause translations", k: ["⌃", "⌥", "."] },
     { name: "Show original on hold", k: ["⌥"] },
-    { name: "Open command palette", k: ["⌃", "Space"] },
+    { name: "Open command palette", k: ["Alt", "Q"] },
   ];
   return (
     <div>

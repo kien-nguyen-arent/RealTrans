@@ -20,6 +20,7 @@ namespace RealTrans.Core.Bridge
         public event EventHandler<InboundMessage>? SettingsSet;
         public event EventHandler<InboundMessage>? HotkeyReassign;
         public event EventHandler? AppReady;
+        public event EventHandler? SelectionOpen;
 
         public void Dispatch(string json)
         {
@@ -36,7 +37,8 @@ namespace RealTrans.Core.Bridge
 
             switch (msg.Type)
             {
-                case "app:ready":      AppReady?.Invoke(this, EventArgs.Empty); break;
+                case "app:ready":       AppReady?.Invoke(this, EventArgs.Empty); break;
+                case "selection:open":  SelectionOpen?.Invoke(this, EventArgs.Empty); break;
                 case "session:start":  SessionStart?.Invoke(this, msg); break;
                 case "session:stop":   SessionStop?.Invoke(this, msg); break;
                 case "region:detect":  RegionDetect?.Invoke(this, msg); break;

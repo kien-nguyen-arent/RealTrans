@@ -28,7 +28,7 @@ const RealTransBridge = (() => {
       try {
         const msg = JSON.parse(e.data);
         const fns = _handlers[msg.type];
-        if (fns) fns.forEach(fn => fn(msg.payload));
+        if (fns) fns.forEach(fn => fn(msg));
       } catch (err) {
         console.error("[bridge:recv] parse error", err, e.data);
       }

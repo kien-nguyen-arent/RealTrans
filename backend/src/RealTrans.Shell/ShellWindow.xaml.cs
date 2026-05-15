@@ -29,24 +29,24 @@ namespace RealTrans.Shell
             ILogger<ShellWindow> logger)
         {
             InitializeComponent();
-            _bus = bus;
-            _hotkeys = hotkeys;
-            _config = config;
-            _pins = pins;
-            _dpi = dpi;
-            _logger = logger;
+            _bus      = bus;
+            _hotkeys  = hotkeys;
+            _config   = config;
+            _pins     = pins;
+            _dpi      = dpi;
+            _logger   = logger;
 
-            _hotkeys.OpenPalettePressed += (_, _) => SendHotkeyFired("openPalette");
+            _hotkeys.OpenPalettePressed  += (_, _) => SendHotkeyFired("openPalette");
             _hotkeys.ToggleOverlayPressed += (_, _) => SendHotkeyFired("toggleOverlay");
 
             _bus.OutboundReady += OnOutboundMessage;
+            _bus.SelectionOpen += OnSelectionOpen;
 
             Loaded += OnLoaded;
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            // Update DPI after window is realized
             _dpi.UpdateFromVisual(this);
 
             try
@@ -81,6 +81,32 @@ namespace RealTrans.Shell
             catch (Exception ex) { _logger.LogError(ex, "Failed to dispatch web message"); }
         }
 
+        // ── Selection area ────────────────────────────────────────────────────
+
+        private async void OnSelectionOpen(object? sender, EventArgs e)
+        {
+            // WebMessageReceived fires on the UI thread, so we can call Hide() directly.
+            // We must hide BEFORE taking the screenshot, then wait for the compositor
+            // to remove this window from the screen before capturing.
+            if (!Dispatcher.CheckAccess())
+            {
+                await Dispatcher.InvokeAsync(() => OnSelectionOpen(sender, e));
+                return;
+            }
+
+            Hide();
+            await System.Threading.Tasks.Task.Delay(200); // compositor flush
+
+            var sel = new SelectionAreaWindow();
+            sel.Committed         += rect => _bus.Publish(new SelectionCommittedMessage(rect));
+            sel.SelectionCancelled += ()   => _bus.Publish(new SelectionCancelledMessage());
+            sel.Closed            += (_, _) => Show();
+            sel.Show();
+            sel.Activate(); // bring to front and give keyboard focus for Esc
+        }
+
+        // ── Outbound: C# → JS ─────────────────────────────────────────────────
+
         private void OnOutboundMessage(object? sender, OutboundMessage msg)
         {
             try
@@ -106,6 +132,7 @@ namespace RealTrans.Shell
         {
             base.OnClosed(e);
             _bus.OutboundReady -= OnOutboundMessage;
+            _bus.SelectionOpen -= OnSelectionOpen;
         }
     }
 }

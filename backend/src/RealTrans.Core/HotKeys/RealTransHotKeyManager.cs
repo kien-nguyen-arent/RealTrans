@@ -20,7 +20,7 @@ namespace Translumo.HotKeys
 
         public RealTransHotKeyManager()
         {
-            _paletteKeyInfo = new HotKeyInfo(Key.Space, KeyModifier.Ctrl | KeyModifier.Alt);
+            _paletteKeyInfo = new HotKeyInfo(Key.Q, KeyModifier.Alt);
             _overlayKeyInfo = new HotKeyInfo(Key.Oem3, KeyModifier.None); // ~ key
         }
 

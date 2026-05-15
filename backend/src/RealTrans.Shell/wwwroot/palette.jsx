@@ -103,7 +103,7 @@ const Palette = ({ open, onClose, onSelect, scenarioId }) => {
               }}
             />
             <Pill mono>JA → EN</Pill>
-            <Pill mono>⌃⌥Space</Pill>
+            <Pill mono>Alt Q</Pill>
           </div>
 
           {/* results */}
