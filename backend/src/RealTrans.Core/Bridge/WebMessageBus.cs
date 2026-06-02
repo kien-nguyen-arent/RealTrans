@@ -27,6 +27,17 @@ namespace RealTrans.Core.Bridge
             InboundMessage msg;
             try
             {
+                // WebView2 quirk: postMessage(string) on the JS side delivers
+                // WebMessageAsJson as a JSON-encoded string ("\"{...}\""). Unwrap
+                // once so InboundMessage deserialization succeeds either way.
+                using (var doc = JsonDocument.Parse(json))
+                {
+                    if (doc.RootElement.ValueKind == JsonValueKind.String)
+                    {
+                        json = doc.RootElement.GetString() ?? "";
+                    }
+                }
+
                 msg = JsonSerializer.Deserialize<InboundMessage>(json,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
             }

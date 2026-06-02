@@ -115,15 +115,18 @@ namespace RealTrans.Core.Orchestration
             _sink.RegisterRegion(regionId, rectDto, renderMode);
 
             var processingService = _services.GetRequiredService<IProcessingService>();
-            if (processingService is TranslationProcessingService tps)
-            {
-                tps.RegionId = regionId;
-                tps.IterationDelayOverrideMs = 120;
-            }
 
             var sessionLogger = _services.GetRequiredService<ILogger<TranslationSession>>();
             var session = new TranslationSession(
                 regionId, captureRect, processingService, _bus, _sequencer, sessionLogger);
+
+            if (processingService is TranslationProcessingService tps)
+            {
+                tps.RegionId = regionId;
+                tps.IterationDelayOverrideMs = 120;
+                // Require N consecutive identical OCR frames before paying for a translation.
+                tps.StabilityCheck = session.IsStable;
+            }
 
             _sessions[regionId] = session;
             session.Start();

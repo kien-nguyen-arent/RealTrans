@@ -19,6 +19,7 @@ namespace RealTrans.Shell
         private readonly RegionPinCollection _pins;
         private readonly DpiHelper _dpi;
         private readonly ILogger<ShellWindow> _logger;
+        private bool _selectionInFlight;
 
         public ShellWindow(
             WebMessageBus bus,
@@ -94,15 +95,58 @@ namespace RealTrans.Shell
                 return;
             }
 
-            Hide();
-            await System.Threading.Tasks.Task.Delay(200); // compositor flush
+            // Re-entry guard: a second selection:open arriving while the previous
+            // SelectionAreaWindow is still alive would leave two overlays on screen.
+            if (_selectionInFlight)
+            {
+                _logger.LogDebug("selection:open ignored — previous selection still in flight");
+                return;
+            }
+            _selectionInFlight = true;
 
-            var sel = new SelectionAreaWindow();
-            sel.Committed         += rect => _bus.Publish(new SelectionCommittedMessage(rect));
-            sel.SelectionCancelled += ()   => _bus.Publish(new SelectionCancelledMessage());
-            sel.Closed            += (_, _) => Show();
-            sel.Show();
-            sel.Activate(); // bring to front and give keyboard focus for Esc
+            SelectionAreaWindow? sel = null;
+            try
+            {
+                Hide();
+                await System.Threading.Tasks.Task.Delay(200); // compositor flush
+
+                sel = new SelectionAreaWindow();
+                bool resolved = false;
+
+                sel.Committed += rect =>
+                {
+                    resolved = true;
+                    _bus.Publish(new SelectionCommittedMessage(rect));
+                };
+                sel.SelectionCancelled += () =>
+                {
+                    resolved = true;
+                    _bus.Publish(new SelectionCancelledMessage());
+                };
+                sel.Closed += (_, _) =>
+                {
+                    _selectionInFlight = false;
+                    // Guarantee JS exits the "selecting" state even if the window
+                    // was closed without firing Committed/SelectionCancelled.
+                    if (!resolved)
+                    {
+                        _bus.Publish(new SelectionCancelledMessage());
+                    }
+                    Show();
+                };
+
+                sel.Show();
+                sel.Activate();
+                sel.ForceForeground(); // bypass Win32 ForegroundLockTimeout
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Selection failed to open");
+                _selectionInFlight = false;
+                sel?.Close();
+                _bus.Publish(new SelectionCancelledMessage());
+                if (!IsVisible) Show();
+            }
         }
 
         // ── Outbound: C# → JS ─────────────────────────────────────────────────

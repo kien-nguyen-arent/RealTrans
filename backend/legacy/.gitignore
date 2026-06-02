@@ -411,4 +411,7 @@ FodyWeavers.xsd
 # build
 python/
 models/
+# Source folder shares the name "Python"; keep it tracked.
+!src/Translumo.Infrastructure/Python/
+!src/Translumo.Infrastructure/Python/**
 

@@ -41,7 +41,7 @@ namespace RealTrans.Shell
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
-                .WriteTo.File("Logs/log.txt", LogEventLevel.Warning,
+                .WriteTo.File("Logs/log.txt", LogEventLevel.Information,
                     rollingInterval: RollingInterval.Day, retainedFileCountLimit: 10)
                 .CreateLogger();
 
@@ -90,6 +90,7 @@ namespace RealTrans.Shell
             services.AddSingleton<TtsConfiguration>(TtsConfiguration.Default);
             services.AddSingleton<ScreenCaptureConfiguration>();
             services.AddSingleton<LanguageService>();
+            services.AddSingleton<TextValidityPredictor>();
             services.AddSingleton<TextDetectionProvider>();
             services.AddSingleton<TextResultCacheService>();
             services.AddSingleton<TextProcessingConfiguration>(new TextProcessingConfiguration());

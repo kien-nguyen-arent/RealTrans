@@ -30,6 +30,13 @@ namespace Translumo.Processing.TextProcessing
         private LanguageDescriptor _languageDescriptor;
         private Regex _langAlphabetRegex;
         private TextTokenizer _textTokenizer;
+        private bool _modelMissing;
+
+        // Score returned when the ML predictor model is missing. Must exceed the
+        // MIN_SCORE_THRESHOLD (2.1f) gate in TranslationProcessingService so that
+        // OCR results still flow through to translation when running without the
+        // optional 400 MB component bundle.
+        private const float NO_MODEL_FALLBACK_SCORE = 5.0f;
 
         private readonly IPredictor<InputTextPrediction, OutputTextPrediction> _validityPredictor;
         private readonly LanguageService _languageService;
@@ -101,6 +108,13 @@ namespace Translumo.Processing.TextProcessing
                 validatedText = _textTokenizer.Tokenize(validatedText);
             }
 
+            // No ML model available → treat any text that already passed the alphabet
+            // regex above as valid with a high constant score so downstream gates pass.
+            if (_modelMissing)
+            {
+                return NO_MODEL_FALLBACK_SCORE;
+            }
+
             var curAttempt = 0;
             if (!_validityPredictor.Loaded)
             {
@@ -131,14 +145,28 @@ namespace Translumo.Processing.TextProcessing
             _languageDescriptor = _languageService.GetLanguageDescriptor(Language);
             var modelPath = Path.Combine(_predictionModelsPath, _languageDescriptor.TextScorePredictorModel);
 
-            try
+            // Make ML scoring optional: app should run even without the 400 MB
+            // components.zip bundle. When the model is absent, fall back to a
+            // constant score in Predict() so the rest of the pipeline still flows.
+            if (!File.Exists(modelPath))
             {
-                _validityPredictor.LoadModel(modelPath);
+                _logger.LogWarning(
+                    "Prediction model '{Path}' not found — running without ML scoring. " +
+                    "OCR results will not be ranked by confidence.", modelPath);
+                _modelMissing = true;
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, $"Predictor model loading error");
-                throw;
+                _modelMissing = false;
+                try
+                {
+                    _validityPredictor.LoadModel(modelPath);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Predictor model loading error — falling back to no-ML mode");
+                    _modelMissing = true;
+                }
             }
 
             _sync.Set();
