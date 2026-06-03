@@ -111,6 +111,11 @@ namespace RealTrans.Shell
             services.AddTransient<TtsFactory>();
             services.AddTransient<IPredictor<InputTextPrediction, OutputTextPrediction>,
                 MlPredictor<InputTextPrediction, OutputTextPrediction>>();
+            // Required by TranslatorFactory (legacy translation pipeline). The legacy WPF app
+            // registered Translumo's InteractionActionDispatcher here, but that type lives in the
+            // unreferenced Translumo app project — so the shell ships its own equivalent.
+            services.AddSingleton<Translumo.Infrastructure.Dispatching.IActionDispatcher,
+                RealTrans.Shell.Services.ActionDispatcher>();
             services.AddTransient<IEncryptionService, AesEncryptionService>();
             services.AddTransient<LanguageDescriptorFactory>();
             services.AddTransient<IProcessingService, TranslationProcessingService>();
