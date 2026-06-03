@@ -15,6 +15,16 @@ const App = () => {
   const [notesOpen, setNotesOpen]           = useState(false);
   const [feed, setFeed]                     = useState([]);
 
+  // Mirror the latest values into refs so the bridge handlers — registered once
+  // in the useEffect([]) below and never re-registered — read current state instead
+  // of stale first-render closures (the user can change scenario / render mode, or
+  // toggle selection, before a selection commits).
+  const scenarioIdRef = useRef(scenarioId);
+  const renderModeRef = useRef(renderMode);
+  const handleStartSelectionRef = useRef(null);
+  scenarioIdRef.current = scenarioId;
+  renderModeRef.current = renderMode;
+
   // ── Bridge ───────────────────────────────────────────────────────
   useEffect(() => {
     RealTransBridge.ready();
@@ -30,22 +40,44 @@ const App = () => {
 
     RealTransBridge.on("hotkey:fired", ({ action }) => {
       if (action === "openPalette")   setPaletteOpen(true);
-      if (action === "toggleOverlay") handleStartSelection();
+      if (action === "toggleOverlay") handleStartSelectionRef.current?.();
     });
 
     // C# selection window committed a screen rect → start session
     RealTransBridge.on("selection:committed", (p) => {
+      if (selectingTimeoutRef.current) {
+        clearTimeout(selectingTimeoutRef.current);
+        selectingTimeoutRef.current = null;
+      }
       setSelecting(false);
       setOverlayActive(true);
       RealTransBridge.send("session:start", {
-        scenarioId,
-        renderMode,
+        scenarioId: scenarioIdRef.current,
+        renderMode: renderModeRef.current,
         regions: [{ id: "caption-band", x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h }],
       });
     });
 
-    // C# selection window was cancelled
-    RealTransBridge.on("selection:cancelled", () => setSelecting(false));
+    // C# selection window was cancelled (or closed unexpectedly)
+    RealTransBridge.on("selection:cancelled", () => {
+      if (selectingTimeoutRef.current) {
+        clearTimeout(selectingTimeoutRef.current);
+        selectingTimeoutRef.current = null;
+      }
+      setSelecting(false);
+    });
+
+    // Backend errors — surface them in the feed so the user (and the dev) sees
+    // them instead of the UI hanging on "Waiting for text…" forever.
+    RealTransBridge.on("error", (p) => {
+      console.error("[backend:error]", p);
+      setFeed(prev => [...prev.slice(-49), {
+        regionId: "system",
+        sourceText: `[${p.code || "error"}]`,
+        translatedText: p.message || "(no message)",
+        elapsedMs: 0,
+      }]);
+    });
   }, []);
 
   // ── Global keyboard ───────────────────────────────────────────────
@@ -69,12 +101,21 @@ const App = () => {
 
   // ── Handlers ─────────────────────────────────────────────────────
 
+  const selectingTimeoutRef = useRef(null);
   const handleStartSelection = () => {
     if (selecting) return;
     setSelecting(true);
     // C# hides this window, shows SelectionAreaWindow, sends back selection:committed
     RealTransBridge.send("selection:open", {});
+    // Safety: if C# never replies (crash, swallowed exception), don't lock the user
+    // out of the Start button forever. 15s is generous — normal flow completes in <3s.
+    if (selectingTimeoutRef.current) clearTimeout(selectingTimeoutRef.current);
+    selectingTimeoutRef.current = setTimeout(() => setSelecting(false), 15000);
   };
+  // Keep the ref pointing at the latest handler so the bridge's hotkey:fired closure
+  // (registered once in the useEffect([]) above) always invokes the current closure,
+  // which reads the current `selecting` and preserves the re-entry guard.
+  handleStartSelectionRef.current = handleStartSelection;
 
   const handlePaletteSelect = (cmd) => {
     setPaletteOpen(false);

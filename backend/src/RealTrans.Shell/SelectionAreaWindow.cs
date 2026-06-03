@@ -24,6 +24,12 @@ namespace RealTrans.Shell
         [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hwnd);
         [DllImport("gdi32.dll")]  static extern int   GetDeviceCaps(IntPtr hdc, int nIndex);
         [DllImport("user32.dll")] static extern int   ReleaseDC(IntPtr hwnd, IntPtr hdc);
+        [DllImport("user32.dll")] static extern bool  SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern uint  GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern bool  AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+        [DllImport("user32.dll")] static extern bool  BringWindowToTop(IntPtr hWnd);
 
         private const int SM_XVIRTUALSCREEN = 76;
         private const int SM_YVIRTUALSCREEN = 77;
@@ -148,6 +154,55 @@ namespace RealTrans.Shell
             {
                 _dpiX = ct.TransformToDevice.M11;
                 _dpiY = ct.TransformToDevice.M22;
+            }
+        }
+
+        /// <summary>
+        /// Bypass Windows' ForegroundLockTimeout protection by briefly attaching to
+        /// the foreground thread's input queue, then calling SetForegroundWindow.
+        /// Required for selection overlay to reliably receive mouse + Esc after
+        /// ShellWindow.Hide() — without this the window appears but stays inactive.
+        /// </summary>
+        public void ForceForeground()
+        {
+            try
+            {
+                var helper = new WindowInteropHelper(this);
+                IntPtr hWnd = helper.Handle;
+                if (hWnd == IntPtr.Zero) return;
+
+                IntPtr foreHandle = GetForegroundWindow();
+                uint foreThread = GetWindowThreadProcessId(foreHandle, IntPtr.Zero);
+                uint thisThread = GetCurrentThreadId();
+
+                if (foreThread != thisThread)
+                {
+                    AttachThreadInput(foreThread, thisThread, true);
+                    try
+                    {
+                        BringWindowToTop(hWnd);
+                        SetForegroundWindow(hWnd);
+                    }
+                    finally
+                    {
+                        // Always detach, even if the calls above throw, so a failure here
+                        // can't leave the thread input queues attached and cause system-wide
+                        // focus/input glitches.
+                        AttachThreadInput(foreThread, thisThread, false);
+                    }
+                }
+                else
+                {
+                    BringWindowToTop(hWnd);
+                    SetForegroundWindow(hWnd);
+                }
+
+                Focus();
+                Keyboard.Focus(this);
+            }
+            catch
+            {
+                // best-effort — never let foreground activation crash the app
             }
         }
 

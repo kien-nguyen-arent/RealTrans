@@ -1,5 +1,11 @@
 // bridge.js — thin IPC wrapper over window.chrome.webview.
 // Falls back to console.debug no-ops so the UI works in a plain browser for design work.
+//
+// IPC contract:
+//   JS → C# : postMessage(OBJECT). WebView2 serializes to JSON; C# reads
+//             WebMessageAsJson and deserializes into InboundMessage record.
+//   C# → JS : PostWebMessageAsJson(jsonString). WebView2 delivers e.data
+//             as the PARSED object — DO NOT call JSON.parse on it.
 
 const RealTransBridge = (() => {
   const isWebView = typeof window.chrome !== "undefined" &&
@@ -7,8 +13,10 @@ const RealTransBridge = (() => {
 
   // ── outbound: JS → C# ────────────────────────────────────────────────────
   function send(type, payload) {
-    const msg = JSON.stringify({ type, payload: payload || {} });
+    const msg = { type, payload: payload || {} };
     if (isWebView) {
+      // postMessage(object) → C# WebMessageAsJson = '{"type":...,"payload":...}'.
+      // Avoid postMessage(string) which arrives wrapped as a JSON-encoded string.
       window.chrome.webview.postMessage(msg);
     } else {
       console.debug("[bridge:send]", type, payload);
@@ -26,7 +34,15 @@ const RealTransBridge = (() => {
   if (isWebView) {
     window.chrome.webview.addEventListener("message", (e) => {
       try {
-        const msg = JSON.parse(e.data);
+        // PostWebMessageAsJson on the C# side delivers e.data already parsed.
+        // Fall back to JSON.parse if some path delivers it as a string.
+        const msg = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (!msg || typeof msg !== "object" || !msg.type) {
+          console.warn("[bridge:recv] unexpected payload", e.data);
+          return;
+        }
+        // Outbound messages from C# are flat: { type, ...props }. Handlers
+        // receive the whole object and destructure what they need.
         const fns = _handlers[msg.type];
         if (fns) fns.forEach(fn => fn(msg));
       } catch (err) {

@@ -45,13 +45,20 @@ namespace RealTrans.Core.Orchestration
             _frameDiffer = new FrameDiffer();
             _stabilization = new StabilizationEngine();
             _holdTimer = new SubtitleHoldTimer(600);
-            _holdTimer.HoldExpired += (_, _) =>
-                _bus.Publish(new TranslationClearedMessage(RegionId));
+            _holdTimer.HoldExpired += OnHoldExpired;
+            _bus.OutboundReady += OnOutboundReady;
         }
+
+        /// <summary>
+        /// Gate evaluated by TranslationProcessingService after primary OCR.
+        /// Requires N consecutive identical OCR frames before allowing a translation call.
+        /// </summary>
+        public bool IsStable(string text) => _stabilization.IsStable(text);
 
         public void Start()
         {
-            var captureConfig = new ScreenCaptureConfiguration { CaptureArea = CaptureRect };
+            _stabilization.Reset();
+            _holdTimer.Cancel();
             _processingService.StartProcessing();
             _logger.LogDebug("Session started for region {RegionId}", RegionId);
         }
@@ -65,9 +72,27 @@ namespace RealTrans.Core.Orchestration
 
         public void Dispose()
         {
+            _bus.OutboundReady -= OnOutboundReady;
+            _holdTimer.HoldExpired -= OnHoldExpired;
             Stop();
             _holdTimer.Dispose();
             (_processingService as IDisposable)?.Dispose();
+        }
+
+        // Restart the hold timer whenever a translation for our region is published,
+        // so the overlay stays visible while text keeps arriving and only fades out
+        // after a quiet period (HoldExpired → TranslationClearedMessage).
+        private void OnOutboundReady(object? sender, OutboundMessage msg)
+        {
+            if (msg is TranslationResultMessage result && result.RegionId == RegionId)
+            {
+                _holdTimer.Restart();
+            }
+        }
+
+        private void OnHoldExpired(object? sender, EventArgs e)
+        {
+            _bus.Publish(new TranslationClearedMessage(RegionId));
         }
     }
 }
