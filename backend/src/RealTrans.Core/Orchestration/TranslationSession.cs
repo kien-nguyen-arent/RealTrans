@@ -18,8 +18,13 @@ namespace RealTrans.Core.Orchestration
         public string RegionId { get; }
         public RectangleF CaptureRect { get; }
 
+        // Consecutive identical OCR frames required before a translation is paid for. The pixel
+        // gate's settle window is sized to this so it never suppresses frames the text-stability
+        // gate still needs to reach its quorum.
+        private const int StableFramesRequired = 2;
+
         private readonly IProcessingService _processingService;
-        private readonly FrameDiffer _frameDiffer;
+        private readonly FrameGate _frameGate;
         private readonly StabilizationEngine _stabilization;
         private readonly SubtitleHoldTimer _holdTimer;
         private readonly WebMessageBus _bus;
@@ -42,12 +47,20 @@ namespace RealTrans.Core.Orchestration
             _bus = bus;
             _sequencer = sequencer;
             _logger = logger;
-            _frameDiffer = new FrameDiffer();
-            _stabilization = new StabilizationEngine();
+            _frameGate = new FrameGate(StableFramesRequired);
+            _stabilization = new StabilizationEngine(StableFramesRequired);
             _holdTimer = new SubtitleHoldTimer(600);
             _holdTimer.HoldExpired += OnHoldExpired;
             _bus.OutboundReady += OnOutboundReady;
         }
+
+        /// <summary>
+        /// Pixel-level gate evaluated by TranslationProcessingService right after capture, before
+        /// any OCR runs. Returns false to skip the OCR/translate pipeline for the current capture,
+        /// avoiding the OCR cost while the region is visually unchanged. See <see cref="FrameGate"/>
+        /// for the settle-window behaviour that keeps this from starving <see cref="IsStable"/>.
+        /// </summary>
+        public bool ShouldProcessFrame(byte[] frame) => _frameGate.ShouldProcess(frame);
 
         /// <summary>
         /// Gate evaluated by TranslationProcessingService after primary OCR.
@@ -57,6 +70,7 @@ namespace RealTrans.Core.Orchestration
 
         public void Start()
         {
+            _frameGate.Reset();
             _stabilization.Reset();
             _holdTimer.Cancel();
             _processingService.StartProcessing();

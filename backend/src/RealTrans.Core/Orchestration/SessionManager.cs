@@ -128,7 +128,11 @@ namespace RealTrans.Core.Orchestration
                 // which would otherwise throw "Capture area is not selected" every iteration.
                 tps.CaptureArea = captureRect;
                 tps.IterationDelayOverrideMs = 120;
-                // Require N consecutive identical OCR frames before paying for a translation.
+                // Pixel-level gate (before OCR): skip the OCR/translate pipeline entirely while the
+                // captured region is visually unchanged, so a static subtitle costs almost no CPU.
+                tps.FrameCheck = session.ShouldProcessFrame;
+                // Text-level gate (after OCR): require N consecutive identical OCR frames before
+                // paying for a translation.
                 tps.StabilityCheck = session.IsStable;
             }
 
