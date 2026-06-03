@@ -178,9 +178,18 @@ namespace RealTrans.Shell
                 if (foreThread != thisThread)
                 {
                     AttachThreadInput(foreThread, thisThread, true);
-                    BringWindowToTop(hWnd);
-                    SetForegroundWindow(hWnd);
-                    AttachThreadInput(foreThread, thisThread, false);
+                    try
+                    {
+                        BringWindowToTop(hWnd);
+                        SetForegroundWindow(hWnd);
+                    }
+                    finally
+                    {
+                        // Always detach, even if the calls above throw, so a failure here
+                        // can't leave the thread input queues attached and cause system-wide
+                        // focus/input glitches.
+                        AttachThreadInput(foreThread, thisThread, false);
+                    }
                 }
                 else
                 {

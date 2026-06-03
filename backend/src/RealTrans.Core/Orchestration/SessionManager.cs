@@ -123,6 +123,10 @@ namespace RealTrans.Core.Orchestration
             if (processingService is TranslationProcessingService tps)
             {
                 tps.RegionId = regionId;
+                // Per-session capture rect so the OCR loop captures this region directly,
+                // instead of the (never-set) singleton ScreenCaptureConfiguration.CaptureArea
+                // which would otherwise throw "Capture area is not selected" every iteration.
+                tps.CaptureArea = captureRect;
                 tps.IterationDelayOverrideMs = 120;
                 // Require N consecutive identical OCR frames before paying for a translation.
                 tps.StabilityCheck = session.IsStable;

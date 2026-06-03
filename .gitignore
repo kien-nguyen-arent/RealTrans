@@ -6,6 +6,7 @@ AGENTS.md
 # ── .NET build output ─────────────────────────────────────────────────────────
 [Bb]in/
 [Oo]bj/
+[Pp]ublish/
 [Ll]og/
 [Ll]ogs/
 artifacts/

@@ -34,6 +34,15 @@ namespace Translumo.Processing
         public string RegionId { get; set; } = string.Empty;
 
         /// <summary>
+        /// Per-session capture rectangle. When set (non-empty), the continuous translation loop
+        /// captures this exact region via the rect-aware overload instead of relying on the shared
+        /// singleton <see cref="Translumo.Configuration.ScreenCaptureConfiguration.CaptureArea"/>.
+        /// Set by RealTrans SessionManager so each region captures its own area and concurrent
+        /// sessions don't fight over the singleton config. Defaults empty (legacy single-region path).
+        /// </summary>
+        public RectangleF CaptureArea { get; set; }
+
+        /// <summary>
         /// Optional gate evaluated after primary OCR, before the dedup cache. Return false to skip the
         /// current iteration without touching the cache (text will be re-evaluated next frame).
         /// Used by RealTrans to require cross-frame OCR stability before paying for a translation call.
@@ -211,7 +220,9 @@ namespace Translumo.Processing
                             continue;
                         }
 
-                        byte[] screenshot = _capturer.CaptureScreen();
+                        byte[] screenshot = CaptureArea.IsEmpty
+                            ? _capturer.CaptureScreen()
+                            : _capturer.CaptureScreen(CaptureArea);
                         var primaryDetected = _textProvider.GetText(primaryOcr, screenshot);
                         lastIterationType = IterationType.Short;
                         if (primaryDetected.ValidityScore == 0)

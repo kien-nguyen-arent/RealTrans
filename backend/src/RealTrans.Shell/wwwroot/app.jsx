@@ -15,6 +15,16 @@ const App = () => {
   const [notesOpen, setNotesOpen]           = useState(false);
   const [feed, setFeed]                     = useState([]);
 
+  // Mirror the latest values into refs so the bridge handlers — registered once
+  // in the useEffect([]) below and never re-registered — read current state instead
+  // of stale first-render closures (the user can change scenario / render mode, or
+  // toggle selection, before a selection commits).
+  const scenarioIdRef = useRef(scenarioId);
+  const renderModeRef = useRef(renderMode);
+  const handleStartSelectionRef = useRef(null);
+  scenarioIdRef.current = scenarioId;
+  renderModeRef.current = renderMode;
+
   // ── Bridge ───────────────────────────────────────────────────────
   useEffect(() => {
     RealTransBridge.ready();
@@ -30,7 +40,7 @@ const App = () => {
 
     RealTransBridge.on("hotkey:fired", ({ action }) => {
       if (action === "openPalette")   setPaletteOpen(true);
-      if (action === "toggleOverlay") handleStartSelection();
+      if (action === "toggleOverlay") handleStartSelectionRef.current?.();
     });
 
     // C# selection window committed a screen rect → start session
@@ -42,8 +52,8 @@ const App = () => {
       setSelecting(false);
       setOverlayActive(true);
       RealTransBridge.send("session:start", {
-        scenarioId,
-        renderMode,
+        scenarioId: scenarioIdRef.current,
+        renderMode: renderModeRef.current,
         regions: [{ id: "caption-band", x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h }],
       });
     });
@@ -102,6 +112,10 @@ const App = () => {
     if (selectingTimeoutRef.current) clearTimeout(selectingTimeoutRef.current);
     selectingTimeoutRef.current = setTimeout(() => setSelecting(false), 15000);
   };
+  // Keep the ref pointing at the latest handler so the bridge's hotkey:fired closure
+  // (registered once in the useEffect([]) above) always invokes the current closure,
+  // which reads the current `selecting` and preserves the re-entry guard.
+  handleStartSelectionRef.current = handleStartSelection;
 
   const handlePaletteSelect = (cmd) => {
     setPaletteOpen(false);
