@@ -155,7 +155,12 @@ namespace RealTrans.Shell
         {
             try
             {
-                var json = JsonSerializer.Serialize(msg, new JsonSerializerOptions
+                // Serialize against the RUNTIME type (msg.GetType()), not the declared abstract
+                // OutboundMessage. System.Text.Json serializes the ROOT using its compile-time
+                // type, so passing `msg` directly would emit ONLY {"type":...} and silently drop
+                // every derived payload (rect, action, sourceText, settings…). That broke
+                // selection:committed, hotkey:fired, translation:result, and state:init.
+                var json = JsonSerializer.Serialize(msg, msg.GetType(), new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });

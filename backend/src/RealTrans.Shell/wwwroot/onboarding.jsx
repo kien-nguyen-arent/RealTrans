@@ -168,10 +168,7 @@ const OnbStep1 = ({ src, setSrc, dst, setDst, hotkey, setHotkey }) => {
           </div>
           <span style={{ fontSize: 12.5, color: "var(--rt-fg-2)" }}>anywhere to activate.</span>
           <div style={{ flex: 1 }} />
-          <button style={{
-            background: "transparent", border: 0, color: "var(--rt-accent-bright)",
-            fontSize: 11, cursor: "pointer",
-          }}>Rebind</button>
+          <span style={{ fontSize: 11, color: "var(--rt-fg-3)" }}>Change in Settings → Hotkeys</span>
         </div>
       </div>
     </div>

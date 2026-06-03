@@ -66,6 +66,16 @@ namespace RealTrans.Shell
             var hotkeys = _serviceProvider.GetRequiredService<Translumo.HotKeys.RealTransHotKeyManager>();
             hotkeys.RegisterAll();
 
+            // These singletons wire up their WebMessageBus event subscriptions in their
+            // constructors (SessionManager → session:start/stop, OverlayManager → overlay:update,
+            // UiSettingsCoordinator → app:ready/settings:get/settings:set/hotkey:reassign).
+            // DI singletons are created lazily on first resolve, so we MUST resolve them here at
+            // startup. Otherwise nothing subscribes and every inbound message is dropped silently
+            // (e.g. "Start translating" did nothing because SessionManager was never constructed).
+            _serviceProvider.GetRequiredService<SessionManager>();
+            _serviceProvider.GetRequiredService<OverlayManager>();
+            _serviceProvider.GetRequiredService<UiSettingsCoordinator>();
+
             var shell = _serviceProvider.GetRequiredService<ShellWindow>();
             shell.Show();
         }
@@ -124,6 +134,9 @@ namespace RealTrans.Shell
 
             // Shell window
             services.AddSingleton<ShellWindow>();
+
+            // Bridges UI settings/state/hotkey messages to config + hotkey manager.
+            services.AddSingleton<UiSettingsCoordinator>();
 
             services.AddRealTransConfigurationStorage();
         }

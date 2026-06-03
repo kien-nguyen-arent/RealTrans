@@ -14,6 +14,8 @@ const App = () => {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [notesOpen, setNotesOpen]           = useState(false);
   const [feed, setFeed]                     = useState([]);
+  const [settings, setSettings]             = useState({}); // flat key→value store, hydrated from C#
+  const [pins, setPins]                     = useState([]); // persisted pinned regions
 
   // Mirror the latest values into refs so the bridge handlers — registered once
   // in the useEffect([]) below and never re-registered — read current state instead
@@ -22,16 +24,24 @@ const App = () => {
   const scenarioIdRef = useRef(scenarioId);
   const renderModeRef = useRef(renderMode);
   const handleStartSelectionRef = useRef(null);
+  const pinModeRef = useRef(false); // true → next selection commit pins a region instead of translating
   scenarioIdRef.current = scenarioId;
   renderModeRef.current = renderMode;
 
   // ── Bridge ───────────────────────────────────────────────────────
   useEffect(() => {
     RealTransBridge.ready();
+    RealTransBridge.send("settings:get", {}); // request a snapshot in case state:init was missed
 
     RealTransBridge.on("state:init", (p) => {
       if (p.renderMode)     setRenderMode(p.renderMode);
       if (p.activeScenario) setScenarioId(p.activeScenario);
+      if (p.settings)       setSettings(prev => ({ ...prev, ...p.settings }));
+      if (p.pinnedRegions)  setPins(p.pinnedRegions);
+    });
+
+    RealTransBridge.on("settings:snapshot", (p) => {
+      if (p.settings) setSettings(prev => ({ ...prev, ...p.settings }));
     });
 
     RealTransBridge.on("translation:result", (p) => {
@@ -43,18 +53,31 @@ const App = () => {
       if (action === "toggleOverlay") handleStartSelectionRef.current?.();
     });
 
-    // C# selection window committed a screen rect → start session
+    // C# selection window committed a screen rect → start a session, OR pin the region.
     RealTransBridge.on("selection:committed", (p) => {
       if (selectingTimeoutRef.current) {
         clearTimeout(selectingTimeoutRef.current);
         selectingTimeoutRef.current = null;
       }
       setSelecting(false);
+
+      const rect = p.rect || {};
+      if (pinModeRef.current) {
+        // Pin-a-region flow: register a persisted pin, don't start translating.
+        pinModeRef.current = false;
+        RealTransBridge.send("region:pin", {
+          label: `Pinned · ${scenarioIdRef.current}`,
+          scenarioId: scenarioIdRef.current,
+          x: rect.x, y: rect.y, w: rect.w, h: rect.h,
+        });
+        return;
+      }
+
       setOverlayActive(true);
       RealTransBridge.send("session:start", {
         scenarioId: scenarioIdRef.current,
         renderMode: renderModeRef.current,
-        regions: [{ id: "caption-band", x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h }],
+        regions: [{ id: "caption-band", x: rect.x, y: rect.y, w: rect.w, h: rect.h }],
       });
     });
 
@@ -64,6 +87,7 @@ const App = () => {
         clearTimeout(selectingTimeoutRef.current);
         selectingTimeoutRef.current = null;
       }
+      pinModeRef.current = false;
       setSelecting(false);
     });
 
@@ -117,12 +141,57 @@ const App = () => {
   // which reads the current `selecting` and preserves the re-entry guard.
   handleStartSelectionRef.current = handleStartSelection;
 
+  // Persist a single setting and update local state optimistically.
+  const handleSettingChange = (key, value) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+    if (key === "renderMode" || key === "renderStyle") setRenderMode(value);
+    RealTransBridge.send("settings:set", { key, value });
+  };
+
+  const handleRenderMode = (id) => {
+    setRenderMode(id);
+    setSettings(prev => ({ ...prev, renderMode: id, renderStyle: id }));
+    RealTransBridge.send("settings:set", { key: "renderMode", value: id });
+  };
+
+  const handleReassignHotkey = (action, key, modifiers) => {
+    RealTransBridge.send("hotkey:reassign", { action, key, modifiers });
+  };
+
+  const handleUnpinRegion = (id) => {
+    setPins(prev => prev.filter(p => p.id !== id));
+    RealTransBridge.send("region:unpin", { id });
+  };
+
+  const handlePinRegion = () => {
+    setSettingsOpen(false);
+    pinModeRef.current = true;
+    setTimeout(handleStartSelection, 60);
+  };
+
   const handlePaletteSelect = (cmd) => {
     setPaletteOpen(false);
-    if (["select", "recent", "translate-window"].includes(cmd.action)) {
-      setTimeout(handleStartSelection, 60);
-    } else if (cmd.action === "settings") {
-      setTimeout(() => setSettingsOpen(true), 60);
+    switch (cmd.action) {
+      case "select":
+      case "recent":
+      case "translate-window":
+        setTimeout(handleStartSelection, 60);
+        break;
+      case "pin":
+        setTimeout(handlePinRegion, 60);
+        break;
+      case "mode":
+        // mode commands carry their scenario in the id, e.g. "mode-game" → "game"
+        if (typeof cmd.id === "string" && cmd.id.startsWith("mode-")) {
+          handleScenario(cmd.id.slice("mode-".length));
+        }
+        break;
+      case "settings":
+      case "lang":
+        setTimeout(() => setSettingsOpen(true), 60);
+        break;
+      default:
+        break;
     }
   };
 
@@ -138,6 +207,7 @@ const App = () => {
       setOverlayActive(false);
     }
     setScenarioId(id);
+    RealTransBridge.send("settings:set", { key: "activeScenarioId", value: id });
   };
 
   // ── Render ────────────────────────────────────────────────────────
@@ -148,7 +218,7 @@ const App = () => {
         scenarioId={scenarioId}
         onScenario={handleScenario}
         renderMode={renderMode}
-        onRenderMode={setRenderMode}
+        onRenderMode={handleRenderMode}
         overlayActive={overlayActive}
         selecting={selecting}
         onStart={handleStartSelection}
@@ -173,7 +243,17 @@ const App = () => {
         scenarioId={scenarioId}
       />
 
-      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onChange={handleSettingChange}
+        renderMode={renderMode}
+        pins={pins}
+        onUnpinRegion={handleUnpinRegion}
+        onPinRegion={handlePinRegion}
+        onReassignHotkey={handleReassignHotkey}
+      />
       <Onboarding open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
       <Notes open={notesOpen} onClose={() => setNotesOpen(false)} />
 
