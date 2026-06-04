@@ -14,6 +14,10 @@ const MODES = [
 ];
 
 const OVERLAY_STYLES = [
+  // Inline is the default: no screen overlay, results render in the app's
+  // right pane split into Original (top) and Translated (bottom). Great for
+  // debugging — you see exactly what OCR is reading and what's being translated.
+  { id: "inline",   label: "Inline",   icon: "layers" },
   { id: "replace",  label: "Replace",  icon: "wand"   },
   { id: "ghost",    label: "Ghost",    icon: "eye"    },
   { id: "parallel", label: "Parallel", icon: "layers" },
@@ -141,10 +145,218 @@ const ModeRow = ({ mode, active, disabled, onClick }) => (
 );
 
 /* ── TranslationFeed ─────────────────────────────────────────────── */
-const TranslationFeed = ({ overlayActive, feed, renderMode }) => {
+
+// Returns true if an error item belongs in the Original half (OCR/capture/language).
+// Anything else (translator failures, network, generic pipeline) goes in Translated.
+const isOriginalError = (item) =>
+  item.kind === "error" && /^(ocr|capture|language|no-ocr)/i.test(item.code || "");
+
+const TranslationFeed = ({ overlayActive, feed, renderMode, latestPreview }) => {
+  if (renderMode === "inline") {
+    return (
+      <InlineTranslationFeed
+        overlayActive={overlayActive}
+        feed={feed}
+        latestPreview={latestPreview}
+      />
+    );
+  }
+  return <SingleListTranslationFeed overlayActive={overlayActive} feed={feed} renderMode={renderMode} />;
+};
+
+/* Inline mode — Original (top) / Translated (bottom) split. */
+const InlineTranslationFeed = ({ overlayActive, feed, latestPreview }) => {
+  const origRef  = useRef(null);
+  const transRef = useRef(null);
+
+  // Split the feed into the two halves.
+  const originalItems = feed.filter(
+    it => it.kind === "translation" || isOriginalError(it)
+  );
+  const translatedItems = feed.filter(
+    it =>
+      it.kind === "translation" ||
+      it.kind === "status" ||
+      (it.kind === "error" && !isOriginalError(it))
+  );
+
+  // Auto-scroll both panes when items arrive.
+  useEffect(() => {
+    if (origRef.current)  origRef.current.scrollTop  = origRef.current.scrollHeight;
+    if (transRef.current) transRef.current.scrollTop = transRef.current.scrollHeight;
+  }, [feed.length, latestPreview?.at]);
+
+  if (!overlayActive && feed.length === 0 && !latestPreview) return <FeedEmpty />;
+
+  return (
+    <div className="tf-root" style={{ display: "flex", flexDirection: "column" }}>
+      {/* Status bar */}
+      <div className="tf-bar">
+        <div className="tf-status">
+          <span className={`tf-dot${overlayActive ? " live" : ""}`} />
+          {overlayActive ? (
+            <>
+              <span>Translating</span>
+              <Pill mono accent style={{ marginLeft: 6 }}>Inline</Pill>
+            </>
+          ) : (
+            <span style={{ color: "var(--rt-fg-3)" }}>Stopped</span>
+          )}
+        </div>
+        <span style={{ fontFamily: "var(--rt-mono)", fontSize: 10.5, color: "var(--rt-fg-3)" }}>
+          JA → EN
+        </span>
+      </div>
+
+      {/* Original half */}
+      <div style={{
+        flex: 1,
+        display: "flex", flexDirection: "column",
+        minHeight: 0,
+        borderBottom: "0.5px solid var(--rt-line-2)",
+      }}>
+        <PaneHeader label="Original" sub="What OCR is reading" />
+        <div ref={origRef} className="tf-feed" style={{ flex: 1, minHeight: 0 }}>
+          {originalItems.length === 0 && !latestPreview && overlayActive && (
+            <div className="tf-waiting">
+              <ThinkingDots />
+              <span>Listening for text…</span>
+            </div>
+          )}
+          {originalItems.map((item, i) => (
+            <OriginalFeedItem key={`o${i}`} item={item} />
+          ))}
+          {latestPreview && (
+            <LivePreviewRow text={latestPreview.text} />
+          )}
+        </div>
+      </div>
+
+      {/* Translated half */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+        <PaneHeader label="Translated" sub="What the translator returns" />
+        <div ref={transRef} className="tf-feed" style={{ flex: 1, minHeight: 0 }}>
+          {translatedItems.length === 0 && overlayActive && (
+            <div className="tf-waiting">
+              <ThinkingDots />
+              <span>Waiting for text…</span>
+            </div>
+          )}
+          {translatedItems.map((item, i) => (
+            <TranslatedFeedItem key={`t${i}`} item={item} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* Original feed row variants */
+const OriginalFeedItem = ({ item }) => {
+  if (item.kind === "error") {
+    return <ErrorRow code={item.code} message={item.message} />;
+  }
+  // translation — show only the source text on the Original side
+  return (
+    <div className="tf-item">
+      <div className="tf-src" style={{ fontSize: 14 }}>{item.sourceText}</div>
+      <div className="tf-meta">
+        {item.regionId && <span>· {item.regionId}</span>}
+      </div>
+    </div>
+  );
+};
+
+/* Translated feed row variants */
+const TranslatedFeedItem = ({ item }) => {
+  if (item.kind === "status") {
+    return (
+      <div className="tf-item tf-item-status" style={{ opacity: 0.7 }}>
+        <div style={{
+          fontFamily: "var(--rt-mono)",
+          fontSize: 11.5,
+          color: "var(--rt-fg-3)",
+        }}>
+          {item.text}
+        </div>
+      </div>
+    );
+  }
+  if (item.kind === "error") {
+    return <ErrorRow code={item.code} message={item.message} />;
+  }
+  // translation — show only the translated text + latency on the Translated side
+  return (
+    <div className="tf-item">
+      <div className="tf-dst" style={{ fontSize: 14 }}>{item.translatedText}</div>
+      <div className="tf-meta">
+        <span>{item.elapsedMs} ms</span>
+      </div>
+    </div>
+  );
+};
+
+const PaneHeader = ({ label, sub }) => (
+  <div style={{
+    padding: "8px 14px 6px",
+    borderBottom: "0.5px solid var(--rt-line)",
+    display: "flex", alignItems: "baseline", gap: 8,
+    flex: "0 0 auto",
+  }}>
+    <span style={{
+      fontFamily: "var(--rt-mono)", fontSize: 10.5, fontWeight: 600,
+      letterSpacing: "0.08em", textTransform: "uppercase",
+      color: "var(--rt-fg-2)",
+    }}>{label}</span>
+    <span style={{ fontSize: 11, color: "var(--rt-fg-3)" }}>{sub}</span>
+  </div>
+);
+
+// Latest OCR preview — distinct from history rows (slightly transparent, blinking
+// border) so the user can tell it's the live cursor of what OCR is currently
+// reading, not a committed result.
+const LivePreviewRow = ({ text }) => (
+  <div className="tf-item" style={{
+    border: "0.5px dashed rgba(139,124,255,0.45)",
+    background: "rgba(139,124,255,0.04)",
+    opacity: 0.92,
+  }}>
+    <div style={{
+      fontFamily: "var(--rt-mono)",
+      fontSize: 10, fontWeight: 600,
+      letterSpacing: "0.08em", textTransform: "uppercase",
+      color: "var(--rt-accent-bright)",
+      marginBottom: 4,
+    }}>Live OCR</div>
+    <div className="tf-src" style={{ fontSize: 13.5 }}>{text || "(no characters detected)"}</div>
+  </div>
+);
+
+const ErrorRow = ({ code, message }) => (
+  <div className="tf-item tf-item-error">
+    <div style={{
+      fontFamily: "var(--rt-mono)",
+      fontSize: 10.5,
+      color: "var(--rt-rose)",
+      letterSpacing: "0.02em",
+    }}>
+      [{code}]
+    </div>
+    <div style={{
+      fontSize: 12.5,
+      color: "var(--rt-fg-2)",
+      lineHeight: 1.5,
+      marginTop: 4,
+    }}>
+      {message}
+    </div>
+  </div>
+);
+
+/* Single-list mode — used by Replace/Ghost/Parallel/Card render modes. */
+const SingleListTranslationFeed = ({ overlayActive, feed, renderMode }) => {
   const feedRef = useRef(null);
 
-  // Auto-scroll to bottom when new items arrive
   useEffect(() => {
     if (feedRef.current) feedRef.current.scrollTop = feedRef.current.scrollHeight;
   }, [feed.length]);
@@ -155,7 +367,6 @@ const TranslationFeed = ({ overlayActive, feed, renderMode }) => {
 
   return (
     <div className="tf-root">
-      {/* Status bar */}
       <div className="tf-bar">
         <div className="tf-status">
           <span className={`tf-dot${overlayActive ? " live" : ""}`} />
@@ -173,7 +384,6 @@ const TranslationFeed = ({ overlayActive, feed, renderMode }) => {
         </span>
       </div>
 
-      {/* Feed */}
       <div ref={feedRef} className="tf-feed">
         {overlayActive && feed.length === 0 && (
           <div className="tf-waiting">
@@ -187,17 +397,59 @@ const TranslationFeed = ({ overlayActive, feed, renderMode }) => {
   );
 };
 
-const FeedItem = ({ item }) => (
-  <div className="tf-item">
-    <div className="tf-src">{item.sourceText}</div>
-    <div className="tf-arrow">↓</div>
-    <div className="tf-dst">{item.translatedText}</div>
-    <div className="tf-meta">
-      <span>{item.elapsedMs} ms</span>
-      {item.regionId && <span>· {item.regionId}</span>}
+const FeedItem = ({ item }) => {
+  // Status rows (Translation started/finished, etc.) — muted, no arrow.
+  if (item.kind === "status") {
+    return (
+      <div className="tf-item tf-item-status" style={{ opacity: 0.7 }}>
+        <div className="tf-status-text" style={{
+          fontFamily: "var(--rt-mono)",
+          fontSize: 11.5,
+          color: "var(--rt-fg-3)",
+        }}>
+          {item.text}
+        </div>
+      </div>
+    );
+  }
+
+  // Error rows — accent color, no arrow, code prefix.
+  if (item.kind === "error") {
+    return (
+      <div className="tf-item tf-item-error">
+        <div className="tf-error-code" style={{
+          fontFamily: "var(--rt-mono)",
+          fontSize: 10.5,
+          color: "var(--rt-rose)",
+          letterSpacing: "0.02em",
+        }}>
+          [{item.code}]
+        </div>
+        <div className="tf-error-msg" style={{
+          fontSize: 12.5,
+          color: "var(--rt-fg-2)",
+          lineHeight: 1.5,
+          marginTop: 4,
+        }}>
+          {item.message}
+        </div>
+      </div>
+    );
+  }
+
+  // Translation row — original look.
+  return (
+    <div className="tf-item">
+      <div className="tf-src">{item.sourceText}</div>
+      <div className="tf-arrow">↓</div>
+      <div className="tf-dst">{item.translatedText}</div>
+      <div className="tf-meta">
+        <span>{item.elapsedMs} ms</span>
+        {item.regionId && <span>· {item.regionId}</span>}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const FeedEmpty = () => (
   <div className="tf-empty">

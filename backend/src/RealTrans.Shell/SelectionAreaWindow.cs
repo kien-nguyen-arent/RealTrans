@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using RealTrans.Core.Bridge;
@@ -41,9 +42,19 @@ namespace RealTrans.Shell
         public event Action<RectDto>? Committed;
         public event Action?          SelectionCancelled;
 
+        private const string IdleHudText = "Drag to select the region to translate  ·  Esc to cancel";
+        private static readonly Color AccentColor = Color.FromRgb(139, 124, 255);
+
         private readonly Canvas    _canvas;
         private readonly Rectangle _selRect;
         private readonly Border    _hudBorder;
+        private readonly TextBlock _hudText;
+        private readonly Border    _dimLabel;
+        private readonly TextBlock _dimLabelText;
+        private readonly Line      _crosshairH;
+        private readonly Line      _crosshairV;
+        private readonly Border    _coordLabel;
+        private readonly TextBlock _coordLabelText;
 
         private Point  _dragStart;
         private bool   _dragging;
@@ -103,19 +114,89 @@ namespace RealTrans.Shell
             };
             _canvas.Children.Add(dim);
 
-            // Selection rectangle
+            // Crosshair guide lines + coordinate label — shown only when idle (not dragging),
+            // so the user can judge precise boundaries before starting a drag.
+            var crosshairBrush = new SolidColorBrush(Color.FromArgb(102, 139, 124, 255)); // ~40% alpha
+            crosshairBrush.Freeze();
+            _crosshairH = new Line
+            {
+                Stroke           = crosshairBrush,
+                StrokeThickness  = 1,
+                IsHitTestVisible = false,
+                Visibility       = Visibility.Collapsed,
+            };
+            _crosshairV = new Line
+            {
+                Stroke           = crosshairBrush,
+                StrokeThickness  = 1,
+                IsHitTestVisible = false,
+                Visibility       = Visibility.Collapsed,
+            };
+            _canvas.Children.Add(_crosshairH);
+            _canvas.Children.Add(_crosshairV);
+
+            _coordLabelText = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromArgb(220, 244, 244, 245)),
+                FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+                FontSize   = 10.5,
+            };
+            _coordLabel = new Border
+            {
+                Background       = new SolidColorBrush(Color.FromArgb(190, 14, 15, 22)),
+                BorderBrush      = new SolidColorBrush(Color.FromArgb(70, 139, 124, 255)),
+                BorderThickness  = new Thickness(0.5),
+                CornerRadius     = new CornerRadius(4),
+                Padding          = new Thickness(6, 2, 6, 2),
+                IsHitTestVisible = false,
+                Visibility       = Visibility.Collapsed,
+                Child            = _coordLabelText,
+            };
+            _canvas.Children.Add(_coordLabel);
+
+            // Selection rectangle.
+            // Fill alpha reduced 45 → 25 to match the prototype's rgba(139,124,255,0.10).
             _selRect = new Rectangle
             {
-                Stroke           = new SolidColorBrush(Color.FromRgb(139, 124, 255)),
+                Stroke           = new SolidColorBrush(AccentColor),
                 StrokeThickness  = 2,
                 StrokeDashArray  = new DoubleCollection { 6, 3 },
-                Fill             = new SolidColorBrush(Color.FromArgb(45, 139, 124, 255)),
+                Fill             = new SolidColorBrush(Color.FromArgb(25, 139, 124, 255)),
                 Visibility       = Visibility.Hidden,
                 IsHitTestVisible = false,
             };
             _canvas.Children.Add(_selRect);
 
+            // Dimension label — small monospace pill that follows the top-left of the
+            // drag rect, showing live W×H px so the user can size the region precisely.
+            _dimLabelText = new TextBlock
+            {
+                Foreground = new SolidColorBrush(Color.FromArgb(240, 244, 244, 245)),
+                FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+                FontSize   = 10.5,
+                FontWeight = FontWeights.Medium,
+            };
+            _dimLabel = new Border
+            {
+                Background       = new SolidColorBrush(Color.FromArgb(230, 14, 15, 22)),
+                BorderBrush      = new SolidColorBrush(Color.FromArgb(110, 139, 124, 255)),
+                BorderThickness  = new Thickness(0.5),
+                CornerRadius     = new CornerRadius(4),
+                Padding          = new Thickness(6, 2, 6, 2),
+                IsHitTestVisible = false,
+                Visibility       = Visibility.Collapsed,
+                Child            = _dimLabelText,
+            };
+            _canvas.Children.Add(_dimLabel);
+
             // HUD pill
+            _hudText = new TextBlock
+            {
+                Text       = IdleHudText,
+                Foreground = new SolidColorBrush(Color.FromArgb(230, 244, 244, 245)),
+                FontSize   = 13,
+                FontFamily = new FontFamily("Segoe UI"),
+            };
             _hudBorder = new Border
             {
                 Background       = new SolidColorBrush(Color.FromArgb(220, 14, 15, 22)),
@@ -124,13 +205,7 @@ namespace RealTrans.Shell
                 CornerRadius     = new CornerRadius(10),
                 Padding          = new Thickness(16, 9, 16, 9),
                 IsHitTestVisible = false,
-                Child = new TextBlock
-                {
-                    Text       = "Drag to select the region to translate  ·  Esc to cancel",
-                    Foreground = new SolidColorBrush(Color.FromArgb(230, 244, 244, 245)),
-                    FontSize   = 13,
-                    FontFamily = new FontFamily("Segoe UI"),
-                },
+                Child            = _hudText,
             };
             _hudBorder.SizeChanged += CenterHud;
             _canvas.SizeChanged    += CenterHud;
@@ -138,10 +213,25 @@ namespace RealTrans.Shell
 
             Content = _canvas;
 
-            _canvas.MouseDown += OnMouseDown;
-            _canvas.MouseMove += OnMouseMove;
-            _canvas.MouseUp   += OnMouseUp;
-            PreviewKeyDown    += OnKeyDown;
+            _canvas.MouseDown  += OnMouseDown;
+            _canvas.MouseMove  += OnMouseMove;
+            _canvas.MouseUp    += OnMouseUp;
+            _canvas.MouseLeave += OnCanvasMouseLeave;
+            PreviewKeyDown     += OnKeyDown;
+            Loaded             += OnLoaded;
+        }
+
+        // 0.25s fade-in matches the prototype's --rt-ease (cubic-bezier(0.22, 1, 0.36, 1)).
+        private void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            var fade = new DoubleAnimation
+            {
+                From           = 0.0,
+                To             = 1.0,
+                Duration       = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            };
+            BeginAnimation(OpacityProperty, fade);
         }
 
         protected override void OnSourceInitialized(EventArgs e)
@@ -264,14 +354,35 @@ namespace RealTrans.Shell
             _dragStart          = e.GetPosition(_canvas);
             _dragging           = true;
             _selRect.Visibility = Visibility.Visible;
+            _dimLabel.Visibility    = Visibility.Visible;
+            _crosshairH.Visibility  = Visibility.Collapsed;
+            _crosshairV.Visibility  = Visibility.Collapsed;
+            _coordLabel.Visibility  = Visibility.Collapsed;
             _canvas.CaptureMouse();
             e.Handled = true;
         }
 
         private void OnMouseMove(object sender, MouseEventArgs e)
         {
-            if (!_dragging) return;
-            UpdateSelRect(_dragStart, e.GetPosition(_canvas));
+            var p = e.GetPosition(_canvas);
+            if (_dragging)
+            {
+                UpdateSelRect(_dragStart, p);
+                UpdateDimensionLabel(_dragStart, p);
+                UpdateHudForDrag(_dragStart, p);
+            }
+            else
+            {
+                UpdateCrosshair(p);
+            }
+        }
+
+        private void OnCanvasMouseLeave(object sender, MouseEventArgs e)
+        {
+            if (_dragging) return;
+            _crosshairH.Visibility = Visibility.Collapsed;
+            _crosshairV.Visibility = Visibility.Collapsed;
+            _coordLabel.Visibility = Visibility.Collapsed;
         }
 
         private void OnMouseUp(object sender, MouseButtonEventArgs e)
@@ -288,7 +399,9 @@ namespace RealTrans.Shell
 
             if (w < 20 || h < 10)
             {
-                _selRect.Visibility = Visibility.Hidden;
+                _selRect.Visibility  = Visibility.Hidden;
+                _dimLabel.Visibility = Visibility.Collapsed;
+                _hudText.Text        = IdleHudText;
                 return;
             }
 
@@ -323,6 +436,72 @@ namespace RealTrans.Shell
             Canvas.SetTop(_selRect, y);
             _selRect.Width  = Math.Max(0, Math.Abs(b.X - a.X));
             _selRect.Height = Math.Max(0, Math.Abs(b.Y - a.Y));
+        }
+
+        // Dimension label sits 4px above the top-left of the rect, in physical pixels
+        // (W×H reflect the screen-space size the user will get on commit).
+        private void UpdateDimensionLabel(Point a, Point b)
+        {
+            double x = Math.Min(a.X, b.X);
+            double y = Math.Min(a.Y, b.Y);
+            double w = Math.Abs(b.X - a.X);
+            double h = Math.Abs(b.Y - a.Y);
+            int    px = (int)Math.Round(w * _dpiX);
+            int    py = (int)Math.Round(h * _dpiY);
+            _dimLabelText.Text = $"{px} × {py} px";
+
+            // Defer the position update until after measure so ActualWidth/Height are known.
+            _dimLabel.UpdateLayout();
+            double labelX = x;
+            double labelY = y - _dimLabel.ActualHeight - 4;
+            if (labelY < 0) labelY = y + 4; // flip below the rect if it would clip the top
+            Canvas.SetLeft(_dimLabel, labelX);
+            Canvas.SetTop(_dimLabel, labelY);
+        }
+
+        private void UpdateHudForDrag(Point a, Point b)
+        {
+            double w  = Math.Abs(b.X - a.X);
+            double h  = Math.Abs(b.Y - a.Y);
+            int    px = (int)Math.Round(w * _dpiX);
+            int    py = (int)Math.Round(h * _dpiY);
+            _hudText.Text = $"{px} × {py} px  ·  Release to commit  ·  Esc to cancel";
+        }
+
+        // Crosshair = two thin lines across the canvas at the cursor, plus an "X, Y px"
+        // label offset 10px from the cursor (so it doesn't sit under the pointer).
+        private void UpdateCrosshair(Point p)
+        {
+            _crosshairH.X1 = 0;
+            _crosshairH.X2 = _canvas.ActualWidth;
+            _crosshairH.Y1 = p.Y;
+            _crosshairH.Y2 = p.Y;
+            _crosshairV.X1 = p.X;
+            _crosshairV.X2 = p.X;
+            _crosshairV.Y1 = 0;
+            _crosshairV.Y2 = _canvas.ActualHeight;
+
+            // Physical-pixel coords, offset by virtual-screen origin — matches what
+            // the user actually selects on commit.
+            int originX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            int originY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            int physX = (int)Math.Round(p.X * _dpiX) + originX;
+            int physY = (int)Math.Round(p.Y * _dpiY) + originY;
+            _coordLabelText.Text = $"{physX}, {physY} px";
+
+            _coordLabel.UpdateLayout();
+            double labelX = p.X + 10;
+            double labelY = p.Y + 10;
+            if (labelX + _coordLabel.ActualWidth > _canvas.ActualWidth)
+                labelX = p.X - _coordLabel.ActualWidth - 10;
+            if (labelY + _coordLabel.ActualHeight > _canvas.ActualHeight)
+                labelY = p.Y - _coordLabel.ActualHeight - 10;
+            Canvas.SetLeft(_coordLabel, labelX);
+            Canvas.SetTop(_coordLabel, labelY);
+
+            _crosshairH.Visibility = Visibility.Visible;
+            _crosshairV.Visibility = Visibility.Visible;
+            _coordLabel.Visibility = Visibility.Visible;
         }
     }
 }

@@ -39,6 +39,18 @@ namespace RealTrans.Overlay
 
         private void ApplyUpdate(OverlayUpdateMessage update)
         {
+            // Inline render mode shows results in the app's in-window feed pane
+            // (Original/Translated split), not as a screen overlay — skip window
+            // creation entirely. Any leftover overlay window for this region from
+            // a previous render mode is closed to avoid stale rectangles on screen.
+            if (string.Equals(update.RenderMode, "inline", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_windows.TryRemove(update.RegionId, out var leftover))
+                    leftover.Close();
+                _lastApplied[update.RegionId] = update.SequenceId;
+                return;
+            }
+
             // Sequence guard: drop late-arriving results
             var lastSeq = _lastApplied.GetOrAdd(update.RegionId, 0u);
             if (update.SequenceId < lastSeq)

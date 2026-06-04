@@ -9,8 +9,11 @@ using RealTrans.Core.Modes.CaptionMode;
 using RealTrans.Core.Regions;
 using RealTrans.Core.Stabilization;
 using Translumo.Configuration;
+using Translumo.Infrastructure.Language;
+using Translumo.OCR.Configuration;
 using Translumo.Processing;
 using Translumo.Processing.Interfaces;
+using Translumo.Translation.Configuration;
 
 namespace RealTrans.Core.Orchestration
 {
@@ -23,6 +26,10 @@ namespace RealTrans.Core.Orchestration
         private readonly WebMessageBus _bus;
         private readonly TranslationSequencer _sequencer;
         private readonly WebTranslationResultSink _sink;
+        private readonly OcrGeneralConfiguration _ocrCfg;
+        private readonly TranslationConfiguration _translationCfg;
+        private readonly LanguageService _languages;
+        private readonly ICaptureIndicatorService _captureIndicator;
         private readonly ILogger<SessionManager> _logger;
         private readonly ConcurrentDictionary<string, TranslationSession> _sessions = new();
         private readonly CaptionRegionDetector _captionDetector = new();
@@ -32,12 +39,20 @@ namespace RealTrans.Core.Orchestration
             WebMessageBus bus,
             TranslationSequencer sequencer,
             WebTranslationResultSink sink,
+            OcrGeneralConfiguration ocrCfg,
+            TranslationConfiguration translationCfg,
+            LanguageService languages,
+            ICaptureIndicatorService captureIndicator,
             ILogger<SessionManager> logger)
         {
             _services = services;
             _bus = bus;
             _sequencer = sequencer;
             _sink = sink;
+            _ocrCfg = ocrCfg;
+            _translationCfg = translationCfg;
+            _languages = languages;
+            _captureIndicator = captureIndicator;
             _logger = logger;
 
             _bus.SessionStart += OnSessionStart;
@@ -109,10 +124,26 @@ namespace RealTrans.Core.Orchestration
         {
             StopSession(regionId);
 
+            // Check OCR readiness BEFORE constructing the processing service. The
+            // legacy pipeline silently no-ops when the chosen language's OCR pack
+            // is missing (TryCreateFromLanguage returns null → empty GetTextLines).
+            var sourceDescriptor = _languages.GetLanguageDescriptor(_translationCfg.TranslateFromLang);
+            var readiness = OcrLanguageProbe.Check(_ocrCfg, sourceDescriptor);
+            if (!readiness.Ready)
+            {
+                _logger.LogWarning("OCR readiness check failed: {Code} {Message}", readiness.Code, readiness.Message);
+                _bus.Publish(new ErrorMessage(readiness.Code!, readiness.Message!));
+                return;
+            }
+
             var rectDto = new RectDto(
                 (int)captureRect.X, (int)captureRect.Y,
                 (int)captureRect.Width, (int)captureRect.Height);
             _sink.RegisterRegion(regionId, rectDto, renderMode);
+
+            // Persistent on-screen marker so the user can see exactly which area
+            // the OCR loop is polling. Hidden on StopSession.
+            _captureIndicator.Show(regionId, rectDto);
 
             var processingService = _services.GetRequiredService<IProcessingService>();
 
@@ -144,6 +175,7 @@ namespace RealTrans.Core.Orchestration
                 _sink.UnregisterRegion(regionId);
                 session.Dispose();
             }
+            _captureIndicator.Hide(regionId);
         }
 
         public void StopAllSessions()

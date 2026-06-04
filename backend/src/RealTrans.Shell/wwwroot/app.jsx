@@ -6,7 +6,7 @@
 
 const App = () => {
   const [scenarioId, setScenarioId]         = useState("anime");
-  const [renderMode, setRenderMode]         = useState("replace");
+  const [renderMode, setRenderMode]         = useState("inline");
   const [overlayActive, setOverlayActive]   = useState(false);
   const [paletteOpen, setPaletteOpen]       = useState(false);
   const [selecting, setSelecting]           = useState(false); // WPF selection window is open
@@ -14,6 +14,10 @@ const App = () => {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [notesOpen, setNotesOpen]           = useState(false);
   const [feed, setFeed]                     = useState([]);
+  // Latest raw OCR text from the side channel. Refreshed every ~1s while a
+  // session is running. Displayed in the Original half of Inline mode so the
+  // user can verify OCR is reading SOMETHING even before a translation lands.
+  const [latestPreview, setLatestPreview]   = useState(null);
 
   // Mirror the latest values into refs so the bridge handlers — registered once
   // in the useEffect([]) below and never re-registered — read current state instead
@@ -35,7 +39,25 @@ const App = () => {
     });
 
     RealTransBridge.on("translation:result", (p) => {
-      setFeed(prev => [...prev.slice(-49), p]);
+      setFeed(prev => [...prev.slice(-49), { ...p, kind: "translation" }]);
+    });
+
+    // Backend lifecycle messages (Translation started/finished, etc.) — appear as
+    // a muted status row so the user can see the pipeline reacting to their click
+    // instead of staring at a frozen "Waiting for text…".
+    RealTransBridge.on("status", (p) => {
+      setFeed(prev => [...prev.slice(-49), {
+        kind: "status",
+        level: p.level || "info",
+        text: p.text || "",
+      }]);
+    });
+
+    // Raw OCR preview (throttled 1 Hz on the C# side). Stored as a single latest
+    // value, not appended to the feed, so it doesn't pollute history. The Inline
+    // layout's Original half renders this beneath any committed source-text rows.
+    RealTransBridge.on("ocr:preview", (p) => {
+      setLatestPreview({ text: p.text || "", at: Date.now() });
     });
 
     RealTransBridge.on("hotkey:fired", ({ action }) => {
@@ -72,11 +94,14 @@ const App = () => {
     RealTransBridge.on("error", (p) => {
       console.error("[backend:error]", p);
       setFeed(prev => [...prev.slice(-49), {
-        regionId: "system",
-        sourceText: `[${p.code || "error"}]`,
-        translatedText: p.message || "(no message)",
-        elapsedMs: 0,
+        kind: "error",
+        code: p.code || "error",
+        message: p.message || "(no message)",
       }]);
+      // An error during selection means the session never started — release the
+      // selecting/overlay flags so the Start button comes back.
+      setSelecting(false);
+      setOverlayActive(false);
     });
   }, []);
 
@@ -129,6 +154,7 @@ const App = () => {
   const handleStop = () => {
     setOverlayActive(false);
     setFeed([]);
+    setLatestPreview(null);
     RealTransBridge.send("session:stop", { scenarioId });
   };
 
@@ -163,6 +189,7 @@ const App = () => {
         overlayActive={overlayActive}
         feed={feed}
         renderMode={renderMode}
+        latestPreview={latestPreview}
         onStop={handleStop}
       />
 

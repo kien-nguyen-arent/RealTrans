@@ -9,6 +9,7 @@ using RealTrans.Core.DPI;
 using RealTrans.Core.Orchestration;
 using RealTrans.Core.Stabilization;
 using RealTrans.Overlay;
+using Translumo.Processing.TextProcessing;
 using RealTrans.Shell.Configuration;
 using Serilog;
 using Serilog.Events;
@@ -19,6 +20,7 @@ using Translumo.Infrastructure.MachineLearning;
 using Translumo.Infrastructure.Python;
 using Translumo.OCR;
 using Translumo.OCR.Configuration;
+using Translumo.OCR.WindowsOCR;
 using Translumo.Processing;
 using Translumo.Processing.Configuration;
 using Translumo.Processing.Interfaces;
@@ -66,6 +68,15 @@ namespace RealTrans.Shell
             var hotkeys = _serviceProvider.GetRequiredService<Translumo.HotKeys.RealTransHotKeyManager>();
             hotkeys.RegisterAll();
 
+            // Eagerly resolve the bus subscribers. SessionManager and OverlayManager
+            // subscribe to WebMessageBus events in their constructors — if we leave
+            // them to lazy resolution, the container never builds them and the bus
+            // fires `session:start` / `overlay:update` to zero subscribers. The
+            // symptom is the React UI hanging on "Waiting for text…" because the
+            // backend silently received the IPC message and dropped it on the floor.
+            _ = _serviceProvider.GetRequiredService<SessionManager>();
+            _ = _serviceProvider.GetRequiredService<OverlayManager>();
+
             var shell = _serviceProvider.GetRequiredService<ShellWindow>();
             shell.Show();
         }
@@ -84,14 +95,35 @@ namespace RealTrans.Shell
         {
             services.AddLogging(b => b.AddSerilog(dispose: true));
 
-            // Legacy pipeline (unchanged)
-            services.AddSingleton<OcrGeneralConfiguration>(OcrGeneralConfiguration.Default);
-            services.AddSingleton<TranslationConfiguration>(TranslationConfiguration.Default);
+            // Legacy pipeline configuration.
+            // Defaults are applied here at DI build time and then overwritten by
+            // ConfigurationStorage.LoadConfiguration() in OnStartup() — so first run
+            // uses the values below and subsequent runs use whatever the user saved
+            // to %APPDATA%/RealTrans/settings.
+            services.AddSingleton<OcrGeneralConfiguration>(_ =>
+            {
+                var cfg = OcrGeneralConfiguration.Default;
+                // WindowsOCR is the only engine enabled by default: it's built into
+                // Windows 10+, requires no Python/CUDA/bundled models, and works
+                // immediately once the user installs the source-language OCR pack.
+                cfg.GetConfiguration<WindowsOCRConfiguration>().Enabled = true;
+                return cfg;
+            });
+            services.AddSingleton<TranslationConfiguration>(_ => new TranslationConfiguration
+            {
+                TranslateFromLang = Languages.Japanese,
+                TranslateToLang   = Languages.English,
+                Translator        = Translators.Google,
+            });
             services.AddSingleton<TtsConfiguration>(TtsConfiguration.Default);
             services.AddSingleton<ScreenCaptureConfiguration>();
             services.AddSingleton<LanguageService>();
             services.AddSingleton<TextValidityPredictor>();
-            services.AddSingleton<TextDetectionProvider>();
+            // Substitute the legacy TextDetectionProvider with a subclass that emits
+            // raw OCR text as IPC OcrPreviewMessage on every primary-OCR call (throttled
+            // 1 Hz). The legacy TranslationProcessingService injects the base type and
+            // receives our subclass via virtual dispatch on GetText.
+            services.AddSingleton<TextDetectionProvider, PreviewingTextDetectionProvider>();
             services.AddSingleton<TextResultCacheService>();
             services.AddSingleton<TextProcessingConfiguration>(new TextProcessingConfiguration());
             services.AddSingleton<ICapturerFactory, ScreenCapturerFactory>();
@@ -121,6 +153,7 @@ namespace RealTrans.Shell
 
             // RealTrans.Overlay
             services.AddSingleton<OverlayManager>();
+            services.AddSingleton<ICaptureIndicatorService, CaptureIndicatorService>();
 
             // Shell window
             services.AddSingleton<ShellWindow>();

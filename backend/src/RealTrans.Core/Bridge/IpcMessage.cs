@@ -83,6 +83,27 @@ namespace RealTrans.Core.Bridge
         public override string Type => "error";
     }
 
+    /// <summary>
+    /// Non-fatal status update routed to the JS feed as a muted row.
+    /// Level: "info" (e.g. "Translation started"), "warn", or "success".
+    /// </summary>
+    public record StatusMessage(string Level, string Text) : OutboundMessage
+    {
+        public override string Type => "status";
+    }
+
+    /// <summary>
+    /// Raw OCR output as the engine reads it — emitted even when the validity
+    /// score is below the translation threshold. The Inline render mode displays
+    /// this in the Original half so the user can verify the OCR is reading
+    /// SOMETHING. Throttled by the publisher (typically 1 Hz) to avoid flooding
+    /// the IPC bus on the ~8 Hz OCR loop.
+    /// </summary>
+    public record OcrPreviewMessage(string RegionId, string Text) : OutboundMessage
+    {
+        public override string Type => "ocr:preview";
+    }
+
     // ── Shared DTOs ───────────────────────────────────────────────────────────
 
     public record RegionDto(

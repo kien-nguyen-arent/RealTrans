@@ -48,10 +48,28 @@ namespace RealTrans.Core.Bridge
                 seq));
         }
 
-        public void SendText(string text, bool successful) { /* no-op: legacy chat window */ }
+        // Legacy IChatTextMediator overloads. Translumo's TranslationProcessingService
+        // calls these to surface lifecycle + error text — we route them to the JS feed
+        // so the user sees actionable failures instead of a silent overlay.
 
-        public void SendText(string text, TextTypes textType) { /* no-op */ }
+        public void SendText(string text, bool successful)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (successful)
+                _bus.Publish(new StatusMessage("info", text));
+            else
+                _bus.Publish(new ErrorMessage("pipeline", text));
+        }
 
-        public void ClearTexts() { /* no-op */ }
+        public void SendText(string text, TextTypes textType)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (textType == TextTypes.Error)
+                _bus.Publish(new ErrorMessage("pipeline", text));
+            else
+                _bus.Publish(new StatusMessage("info", text));
+        }
+
+        public void ClearTexts() { /* no-op: feed is owned by JS and clears on its own */ }
     }
 }
