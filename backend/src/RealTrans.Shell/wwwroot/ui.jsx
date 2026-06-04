@@ -186,9 +186,13 @@ const useDraggableModal = (open) => {
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      window.removeEventListener("blur", up);
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    // If the mouse is released outside the WebView (or the window loses focus mid-drag),
+    // mouseup never fires here — end the drag on blur so listeners don't leak.
+    window.addEventListener("blur", up);
   };
 
   const anchorStyle = pos

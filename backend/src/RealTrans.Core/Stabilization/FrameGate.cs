@@ -33,8 +33,10 @@ namespace RealTrans.Core.Stabilization
 
         /// <param name="settleFrames">
         /// How many consecutive unchanged frames to keep admitting after a change before going
-        /// quiet. Should be &gt;= the <see cref="StabilizationEngine"/> required consecutive-frame
-        /// count so the text-stability gate can confirm before the pixel gate starts suppressing.
+        /// quiet. The changed frame itself is also processed and already counts once toward the
+        /// <see cref="StabilizationEngine"/> quorum, so the minimum that avoids starving the
+        /// text-stability gate is its required consecutive-frame count minus one; passing the
+        /// full count adds one frame of safety margin.
         /// </param>
         public FrameGate(int settleFrames = 2)
         {
