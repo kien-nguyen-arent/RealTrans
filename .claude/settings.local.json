@@ -8,7 +8,12 @@
       "PowerShell(New-Item *)",
       "PowerShell(Start-Process -WindowStyle Hidden python -ArgumentList \"-m\",\"http.server\",\"8741\",\"--directory\",\"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\wwwroot\"; Start-Sleep -Seconds 1; \\(Invoke-WebRequest -UseBasicParsing http://localhost:8741/RealTrans.html\\).StatusCode)",
       "PowerShell(Set-Location *)",
-      "PowerShell(Get-NetTCPConnection *)"
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(dotnet build *)",
+      "PowerShell(Get-Item \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\bin\\\\Debug\\\\net8.0-windows10.0.19041.0\\\\win-x64\\\\wwwroot\\\\ui.jsx\",\"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\bin\\\\Debug\\\\net8.0-windows10.0.19041.0\\\\win-x64\\\\wwwroot\\\\settings.jsx\" | Select-Object Name, LastWriteTime; Select-String -Path \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\bin\\\\Debug\\\\net8.0-windows10.0.19041.0\\\\win-x64\\\\wwwroot\\\\ui.jsx\" -Pattern \"useDraggableModal\" | Select-Object -First 1 | ForEach-Object { $_.Line.Trim\\(\\) })",
+      "PowerShell(foreach \\($p in @\\(\"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\publish\\\\RealTrans\\\\RealTrans.Shell.exe\", \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\publish\\\\RealTrans\\\\wwwroot\\\\ui.jsx\", \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\bin\\\\Release\\\\net8.0-windows10.0.19041.0\\\\win-x64\\\\wwwroot\\\\ui.jsx\"\\)\\) { $i = Get-Item $p -ErrorAction SilentlyContinue; if \\($i\\) { \"{0}  |  {1}\" -f $i.LastWriteTime, $p } else { \"MISSING  |  $p\" } })",
+      "PowerShell(dotnet publish *)",
+      "PowerShell(foreach \\($f in @\\(\"ui.jsx\",\"settings.jsx\",\"palette.jsx\",\"onboarding.jsx\",\"selection.jsx\"\\)\\) { $p = \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\publish\\\\RealTrans\\\\wwwroot\\\\$f\"; \"{0}  |  {1}\" -f \\(Get-Item $p\\).LastWriteTime, $f }; \"\"; $hit = Select-String -Path \"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\publish\\\\RealTrans\\\\wwwroot\\\\ui.jsx\" -Pattern \"useDraggableModal\" | Select-Object -First 1; \"hook in publish: \" + [bool]$hit)"
     ]
   }
 }
