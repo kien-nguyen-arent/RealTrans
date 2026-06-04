@@ -8,6 +8,7 @@ const Onboarding = ({ open, onClose }) => {
   const [src, setSrc] = useState("ja");
   const [dst, setDst] = useState("en");
   const [hotkey, setHotkey] = useState("AltQ");
+  const { boxRef, startDrag, anchorStyle } = useDraggableModal(open);
 
   useEffect(() => { if (open) setStep(0); }, [open]);
 
@@ -21,15 +22,16 @@ const Onboarding = ({ open, onClose }) => {
         zIndex: 70,
         animation: "rt-fade-in 0.2s var(--rt-ease) both",
       }}/>
-      <div style={{
-        position: "absolute", top: "50%", left: "50%",
-        transform: "translate(-50%, -50%)", zIndex: 71,
-        width: 620,
-        animation: "rt-pop-in 0.3s var(--rt-ease-2) both",
+      <div ref={boxRef} style={{
+        position: "absolute", ...anchorStyle,
+        zIndex: 71, width: 620,
       }}>
-        <div className="glass-strong" style={{ borderRadius: 18, padding: 0, overflow: "hidden" }}>
-          {/* progress strip */}
-          <div style={{ display: "flex", padding: "10px 14px 0", gap: 4 }}>
+        <div className="glass-strong" style={{
+          borderRadius: 18, padding: 0, overflow: "hidden",
+          animation: "rt-pop-in 0.3s var(--rt-ease-2) both",
+        }}>
+          {/* progress strip — drag to move */}
+          <div onMouseDown={startDrag} style={{ display: "flex", padding: "10px 14px 0", gap: 4, cursor: "move" }}>
             {[0,1,2].map(i => (
               <div key={i} style={{
                 flex: 1, height: 3, borderRadius: 2,
@@ -45,12 +47,13 @@ const Onboarding = ({ open, onClose }) => {
             {step === 2 && <OnbStep2 />}
           </div>
 
-          {/* footer */}
-          <div style={{
+          {/* footer — also a drag handle (buttons excluded) */}
+          <div onMouseDown={startDrag} style={{
             display: "flex", alignItems: "center",
             padding: "12px 18px", gap: 10,
             borderTop: "0.5px solid var(--rt-line-2)",
             background: "rgba(0,0,0,0.18)",
+            cursor: "move", userSelect: "none",
           }}>
             <span style={{ fontSize: 10.5, color: "var(--rt-fg-3)", fontFamily: "var(--rt-mono)" }}>
               {step + 1} / 3

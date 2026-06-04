@@ -4,7 +4,11 @@
       "Bash(*)",
       "Read(*)",
       "Write(*)",
-      "WebFetch(*)"
+      "WebFetch(*)",
+      "PowerShell(New-Item *)",
+      "PowerShell(Start-Process -WindowStyle Hidden python -ArgumentList \"-m\",\"http.server\",\"8741\",\"--directory\",\"D:\\\\Projects\\\\owner\\\\realTrans\\\\backend\\\\src\\\\RealTrans.Shell\\\\wwwroot\"; Start-Sleep -Seconds 1; \\(Invoke-WebRequest -UseBasicParsing http://localhost:8741/RealTrans.html\\).StatusCode)",
+      "PowerShell(Set-Location *)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

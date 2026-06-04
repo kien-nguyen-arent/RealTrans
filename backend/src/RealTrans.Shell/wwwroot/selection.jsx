@@ -376,11 +376,14 @@ const SelectionHUD = ({ scenarioId, phase, regionLabel, onCancel }) => {
   return (
     <div style={{
       position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)",
-      zIndex: 32, animation: "rt-pop-in 0.2s var(--rt-ease) both",
+      zIndex: 32,
     }}>
+      {/* rt-pop-in animates `transform` with fill `both`, so it must live on the
+         inner surface — on the outer div it would override the centering translate. */}
       <div className="glass-strong" style={{
         padding: "8px 12px 8px 12px", borderRadius: 12, display: "flex", alignItems: "center", gap: 12,
         color: "var(--rt-fg)", fontSize: 12,
+        animation: "rt-pop-in 0.2s var(--rt-ease) both",
       }}>
         <Wordmark size={14} withText={false} />
         <div style={{ width: 1, height: 16, background: "var(--rt-line-2)" }}/>

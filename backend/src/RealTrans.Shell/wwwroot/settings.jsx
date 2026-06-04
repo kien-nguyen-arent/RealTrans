@@ -24,6 +24,7 @@ const Settings = ({ open, onClose, settings = {}, onChange = () => {}, renderMod
                     pins = [], onUnpinRegion = () => {}, onPinRegion = () => {},
                     onReassignHotkey = () => {} }) => {
   const [tab, setTab] = useState("general");
+  const { boxRef, startDrag, anchorStyle } = useDraggableModal(open);
   if (!open) return null;
 
   const tabs = [
@@ -43,16 +44,19 @@ const Settings = ({ open, onClose, settings = {}, onChange = () => {}, renderMod
         backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
         zIndex: 80, animation: "rt-fade-in 0.2s var(--rt-ease) both",
       }}/>
-      <div style={{
-        position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)",
+      <div ref={boxRef} style={{
+        position: "absolute", ...anchorStyle,
         zIndex: 81, width: 780, maxHeight: "84%",
-        animation: "rt-pop-in 0.28s var(--rt-ease-2) both",
       }}>
-        <div className="glass-strong" style={{ borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "84vh" }}>
-          {/* header */}
-          <div style={{
+        <div className="glass-strong" style={{
+          borderRadius: 16, overflow: "hidden", display: "flex", flexDirection: "column", maxHeight: "84vh",
+          animation: "rt-pop-in 0.28s var(--rt-ease-2) both",
+        }}>
+          {/* header — drag to move */}
+          <div onMouseDown={startDrag} style={{
             padding: "14px 20px", borderBottom: "0.5px solid var(--rt-line-2)",
             display: "flex", alignItems: "center", gap: 12,
+            cursor: "move", userSelect: "none",
           }}>
             <Wordmark size={16} />
             <span style={{ fontSize: 12, color: "var(--rt-fg-3)" }}>· Settings</span>

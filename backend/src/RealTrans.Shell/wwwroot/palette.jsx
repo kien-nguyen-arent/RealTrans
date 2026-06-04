@@ -1,5 +1,5 @@
 /* palette.jsx — Command palette: the Raycast-style entry point.
-   Opens on hotkey. Always anchored top-center.
+   Opens on hotkey. Centered on screen by default, draggable by its search row.
    Holds "Translate region", recent pinned regions, languages, modes, settings.
 */
 
@@ -32,6 +32,7 @@ const Palette = ({ open, onClose, onSelect, scenarioId }) => {
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef(null);
+  const { boxRef, startDrag, anchorStyle } = useDraggableModal(open);
 
   const all = useMemo(() => PALETTE_COMMANDS(scenarioId), [scenarioId]);
   const filtered = useMemo(() => {
@@ -80,15 +81,16 @@ const Palette = ({ open, onClose, onSelect, scenarioId }) => {
         animation: "rt-fade-in 0.15s var(--rt-ease) both",
         zIndex: 50,
       }} />
-      <div style={{
-        position: "absolute",
-        top: "12%", left: "50%", transform: "translateX(-50%)",
+      <div ref={boxRef} style={{
+        position: "absolute", ...anchorStyle,
         width: 540, zIndex: 51,
-        animation: "rt-pop-in 0.22s var(--rt-ease-2) both",
       }}>
-        <div className="glass-strong" style={{ borderRadius: 16, overflow: "hidden", padding: 0 }}>
-          {/* search row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 14px", borderBottom: "0.5px solid var(--rt-line-2)" }}>
+        <div className="glass-strong" style={{
+          borderRadius: 16, overflow: "hidden", padding: 0,
+          animation: "rt-pop-in 0.22s var(--rt-ease-2) both",
+        }}>
+          {/* search row — drag anywhere outside the input to move */}
+          <div onMouseDown={startDrag} style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 14px", borderBottom: "0.5px solid var(--rt-line-2)", cursor: "move" }}>
             <Wordmark size={16} withText={false} />
             <input
               ref={inputRef}

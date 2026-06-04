@@ -147,4 +147,55 @@ const ThinkingDots = ({ color }) => (
   </span>
 );
 
-Object.assign(window, { Icon, Wordmark, Pill, ThinkingDots });
+/* ── draggable modal behavior ───────────────────────────────────── */
+/* Shared move-by-dragging for popup modals (Settings, Palette, Onboarding).
+   Returns { boxRef, startDrag, anchorStyle }:
+     anchorStyle — spread into the outer positioned box. Until the user drags,
+       it centers the box in the viewport (50%/50% + translate). After a drag
+       it anchors with pixel left/top.
+   Re-centers every time the popup is (re)opened. Drags starting on
+   interactive elements (button, input, …) are ignored so header controls
+   keep working, and the box is clamped so it can't leave the viewport.
+   NOTE: don't put `rt-pop-in` on the same element as anchorStyle — the
+   keyframes animate `transform` with fill-mode `both`, which permanently
+   overrides the centering translate. Animate the inner surface instead. */
+const useDraggableModal = (open) => {
+  const [pos, setPos] = useState(null); // null → centered, {x,y} after a drag
+  const boxRef = useRef(null);
+
+  useEffect(() => { if (open) setPos(null); }, [open]);
+
+  const startDrag = (e) => {
+    if (e.button !== 0) return; // left button only
+    if (e.target.closest("button, input, textarea, select, [data-nodrag]")) return;
+    const box = boxRef.current;
+    if (!box) return;
+    e.preventDefault(); // no text selection while dragging
+    const r = box.getBoundingClientRect();
+    const offX = e.clientX - r.left;
+    const offY = e.clientY - r.top;
+    const move = (ev) => {
+      const margin = 8;
+      const maxX = window.innerWidth - r.width - margin;
+      const maxY = window.innerHeight - r.height - margin;
+      setPos({
+        x: Math.min(Math.max(margin, ev.clientX - offX), Math.max(margin, maxX)),
+        y: Math.min(Math.max(margin, ev.clientY - offY), Math.max(margin, maxY)),
+      });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  const anchorStyle = pos
+    ? { left: pos.x, top: pos.y }
+    : { left: "50%", top: "50%", transform: "translate(-50%, -50%)" };
+
+  return { boxRef, startDrag, anchorStyle };
+};
+
+Object.assign(window, { Icon, Wordmark, Pill, ThinkingDots, useDraggableModal });
