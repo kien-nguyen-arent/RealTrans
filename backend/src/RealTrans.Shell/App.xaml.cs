@@ -15,6 +15,7 @@ using RealTrans.Shell.Configuration;
 using Serilog;
 using Serilog.Events;
 using Translumo.Configuration;
+using Translumo.Infrastructure.Dispatching;
 using Translumo.Infrastructure.Encryption;
 using Translumo.Infrastructure.Language;
 using Translumo.Infrastructure.MachineLearning;
@@ -66,13 +67,32 @@ namespace RealTrans.Shell
             var configStorage = _serviceProvider.GetRequiredService<ConfigurationStorage>();
             configStorage.LoadConfiguration();
 
-            // Sanity check: a stale persisted settings file may have left every OCR
-            // engine disabled (Translumo's default ships Enabled=false for all three
-            // engines). Without this guard, the user lands on the "no-ocr-engine"
-            // error every launch with no obvious way out. Force WindowsOCR back on
-            // if the persisted state has zero enabled engines — the user can still
-            // disable it later via the sidebar OCR controls if they really mean to.
+            // One-time defaults migration. A persisted settings file written before
+            // this build was created from the legacy Translumo defaults (EN→RU +
+            // DeepL + all OCR engines disabled). After ConfigurationStorage.LoadConfiguration
+            // applies that to our DI singletons, the user gets EN→RU with no OCR —
+            // not what RealTrans wants. Bumping DefaultsSchemaVersion is the signal
+            // that this app has already applied the RealTrans defaults at least once;
+            // a missing/zero value means we're starting from a Translumo-shaped file
+            // (or no file at all) and need to overwrite the translation + OCR config
+            // with the RealTrans presets the user actually wants.
+            var rtCfg  = _serviceProvider.GetRequiredService<RealTransConfiguration>();
+            var trCfg  = _serviceProvider.GetRequiredService<TranslationConfiguration>();
             var ocrCfg = _serviceProvider.GetRequiredService<OcrGeneralConfiguration>();
+            if (rtCfg.DefaultsSchemaVersion < 1)
+            {
+                trCfg.TranslateFromLang = Languages.English;
+                trCfg.TranslateToLang   = Languages.Vietnamese;
+                trCfg.Translator        = Translators.Google;
+                foreach (var c in ocrCfg.OcrConfigurations) c.Enabled = false;
+                ocrCfg.GetConfiguration<WindowsOCRConfiguration>().Enabled = true;
+                rtCfg.DefaultsSchemaVersion = 1;
+                _logger.LogInformation("Applied RealTrans defaults migration (v1): EN→VI, Google, WindowsOCR.");
+            }
+
+            // Sanity check that survives even AFTER migration — a future user could
+            // legitimately disable all engines via the sidebar; the next launch must
+            // not lock them out. Independent of the schema migration above.
             if (!ocrCfg.OcrConfigurations.Any(c => c.Enabled))
             {
                 ocrCfg.GetConfiguration<WindowsOCRConfiguration>().Enabled = true;
@@ -147,7 +167,25 @@ namespace RealTrans.Shell
             services.AddSingleton<TextResultCacheService>();
             services.AddSingleton<TextProcessingConfiguration>(new TextProcessingConfiguration());
             services.AddSingleton<ICapturerFactory, ScreenCapturerFactory>();
-            services.AddSingleton<PythonEngineWrapper>();
+            // PythonEngineWrapper's ctor touches Python.Runtime.Runtime, which loads
+            // native function pointers from python38.dll. We don't ship that DLL
+            // because RealTrans uses WindowsOCR + Google + None TTS — none of which
+            // actually call into Python. The legacy OcrEnginesFactory / TtsFactory
+            // still REQUIRE the dependency for DI to resolve them, but they only
+            // dereference it inside the EasyOCR / Silero code paths we never enter.
+            // GetUninitializedObject creates the wrapper without invoking its ctor,
+            // satisfying the DI graph at zero runtime cost. Any code that actually
+            // calls Init/Execute on this stub will NPE, which is intentional — we'd
+            // rather fail loudly than have Python silently try to initialize.
+            services.AddSingleton<PythonEngineWrapper>(_ =>
+                (PythonEngineWrapper)System.Runtime.CompilerServices
+                    .RuntimeHelpers.GetUninitializedObject(typeof(PythonEngineWrapper)));
+            // TranslatorFactory's ctor takes IActionDispatcher (only the Yandex
+            // translator actually uses it — Google ignores it — but DI must still
+            // satisfy the parameter). The legacy InteractionActionDispatcher lives
+            // in the Translumo WPF project which we don't reference, so we ship a
+            // minimal local mirror in RealTrans.Core.
+            services.AddSingleton<IActionDispatcher, RealTransActionDispatcher>();
             services.AddTransient<OcrEnginesFactory>();
             services.AddTransient<TranslatorFactory>();
             services.AddTransient<TtsFactory>();

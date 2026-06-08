@@ -151,6 +151,20 @@ namespace RealTrans.Core.Orchestration
                         if (prop.Value.ValueKind != System.Text.Json.JsonValueKind.True
                             && prop.Value.ValueKind != System.Text.Json.JsonValueKind.False) continue;
                         bool enable = prop.Value.GetBoolean();
+
+                        // EasyOCR requires an embedded Python 3.8 distribution at
+                        // <AppDir>\Python\ which we don't bundle. The DI registration
+                        // of PythonEngineWrapper is an uninitialized stub — actually
+                        // CONSTRUCTING an EasyOCREngine would NPE inside the legacy
+                        // factory. Reject with a clear instruction instead of letting
+                        // it explode mid-session.
+                        if (prop.Name == "EasyOCR" && enable)
+                        {
+                            _bus.Publish(new ErrorMessage("easyocr-unavailable",
+                                "EasyOCR requires an embedded Python 3.8 distribution at <AppDir>\\Python\\ which is not bundled with this build. Use WindowsOCR or Tesseract."));
+                            continue;
+                        }
+
                         OcrConfiguration? cfg = prop.Name switch
                         {
                             "WindowsOCR" => _ocrCfg.GetConfiguration<WindowsOCRConfiguration>(),

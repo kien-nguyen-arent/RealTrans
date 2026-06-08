@@ -66,7 +66,10 @@ const langCode = (id, table) => table.find(l => l.id === id)?.code ?? id.slice(0
 const OCR_ENGINES = [
   { id: "WindowsOCR", label: "Windows OCR", note: "Built-in", recommended: true },
   { id: "Tesseract",  label: "Tesseract",   note: "Open source · bundled" },
-  { id: "EasyOCR",    label: "EasyOCR",     note: "Python · GPU (heavy)" },
+  // EasyOCR requires an embedded Python 3.8 distribution which we don't ship.
+  // The C# side rejects toggling this on with an `easyocr-unavailable` error;
+  // disabling the row in the UI prevents that round-trip in the first place.
+  { id: "EasyOCR",    label: "EasyOCR",     note: "Python · not bundled in this build", disabled: true },
 ];
 
 // `id` matches the Translators enum NAME on the C# side. Recommended free
@@ -240,11 +243,18 @@ const OcrEnginePicker = ({ engines, onToggle, disabled }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
     {OCR_ENGINES.map(eng => {
       const on = !!engines?.[eng.id];
+      // Two distinct disabled states: `disabled` (session running — temporary,
+      // resumes when session stops) vs `eng.disabled` (permanent — engine
+      // isn't shippable in this build). The latter shows a "Unavailable" hint.
+      const sessionLocked = disabled;
+      const engineUnavailable = !!eng.disabled;
+      const inert = sessionLocked || engineUnavailable;
       return (
         <button
           key={eng.id}
-          onClick={disabled ? undefined : () => onToggle(eng.id, !on)}
-          disabled={disabled}
+          onClick={inert ? undefined : () => onToggle(eng.id, !on)}
+          disabled={inert}
+          title={engineUnavailable ? "Unavailable in this build" : undefined}
           style={{
             display: "flex", alignItems: "center", gap: 8,
             padding: "8px 10px",
@@ -252,9 +262,9 @@ const OcrEnginePicker = ({ engines, onToggle, disabled }) => (
             border: `0.5px solid ${on ? "var(--rt-line-hi)" : "var(--rt-line-2)"}`,
             borderRadius: 7,
             color: "var(--rt-fg)",
-            cursor: disabled ? "default" : "pointer",
+            cursor: inert ? (engineUnavailable ? "not-allowed" : "default") : "pointer",
             textAlign: "left",
-            opacity: disabled ? 0.5 : 1,
+            opacity: engineUnavailable ? 0.4 : (sessionLocked ? 0.5 : 1),
           }}
         >
           <span style={{
@@ -280,6 +290,14 @@ const OcrEnginePicker = ({ engines, onToggle, disabled }) => (
                   letterSpacing: "0.06em", textTransform: "uppercase",
                   color: "var(--rt-accent-bright)",
                 }}>recommended</span>
+              )}
+              {engineUnavailable && (
+                <span style={{
+                  marginLeft: 6,
+                  fontFamily: "var(--rt-mono)", fontSize: 9,
+                  letterSpacing: "0.06em", textTransform: "uppercase",
+                  color: "var(--rt-fg-3)",
+                }}>unavailable</span>
               )}
             </span>
             <span style={{ fontSize: 10.5, color: "var(--rt-fg-3)", marginTop: 1 }}>
