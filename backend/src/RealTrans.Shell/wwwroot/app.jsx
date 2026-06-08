@@ -150,15 +150,37 @@ const App = () => {
     // them instead of the UI hanging on "Waiting for text…" forever.
     RealTransBridge.on("error", (p) => {
       console.error("[backend:error]", p);
+      const code = p.code || "error";
       setFeed(prev => [...prev.slice(-49), {
         kind: "error",
-        code: p.code || "error",
+        code,
         message: p.message || "(no message)",
       }]);
-      // An error during selection means the session never started — release the
-      // selecting/overlay flags so the Start button comes back.
-      setSelecting(false);
-      setOverlayActive(false);
+      // Only auto-revert the UI to "not translating" for SETUP failures — the
+      // session genuinely never started, so the Start button should come back.
+      // For runtime errors (DXGI hiccups, transient capture failures, translator
+      // timeouts), the session is still alive on the C# side, and clearing
+      // overlayActive here would hide the Stop button — leaving the user with
+      // no way to exit translation mode while the OCR loop keeps running. This
+      // was the root cause of "how do I exit translation mode?" — the previous
+      // blanket clear made the Stop button disappear behind any error toast.
+      const SETUP_FAILURE_CODES = new Set([
+        "session-start",
+        "session-start-failed",
+        "probe-threw",
+        "resolve-processing-service",
+        "no-ocr-engine",
+        "ocr-language-not-installed",
+      ]);
+      if (SETUP_FAILURE_CODES.has(code)) {
+        setSelecting(false);
+        setOverlayActive(false);
+      } else {
+        // Still release the selecting flag — a runtime error doesn't imply the
+        // selection window is stuck open, but if it was, the Start button now
+        // shows as "Selecting region…" forever. Safer to clear it.
+        setSelecting(false);
+      }
     });
   }, []);
 

@@ -268,7 +268,19 @@ namespace RealTrans.Core.Orchestration
 
         private void StartSession(string regionId, RectangleF captureRect, string renderMode)
         {
-            StopSession(regionId);
+            // Stop EVERY prior session, not just the one with this regionId. The user
+            // typically expects "press ` to re-pick the area" to fully replace the
+            // current session — if the new region ID happens to match the old one
+            // (JS hardcodes "caption-band" today), StopSession(regionId) was enough,
+            // but a future scenario that uses a different ID would orphan the old
+            // session. StopAllSessions handles both cases.
+            //
+            // The teardown path (TranslationSession.Dispose → processingService
+            // .Dispose → ScreenDXCapturer.Dispose) used to race the capture thread
+            // and surface as NullReferenceException; ScreenDXCapturer now snapshots
+            // its DXGI handles into locals and throws CaptureException cleanly when
+            // the dispose races a frame acquisition.
+            StopAllSessions();
 
             // Granular checkpoint StatusMessages around each step so the user can
             // see EXACTLY where the pipeline dies — silent forever-stuck is the
