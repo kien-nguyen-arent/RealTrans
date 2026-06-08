@@ -34,7 +34,16 @@ namespace RealTrans.Overlay.Modes
 
         public override void UpdateTranslation(string translatedText, string renderMode)
         {
-            Dispatcher.Invoke(() => _textBlock.Text = translatedText);
+            // Race guard — see ReplaceOverlayWindow.UpdateTranslation for the
+            // full rationale. Mid-session render-mode switches can leave a
+            // TranslationResultMessage in flight that lands on the just-closed
+            // window; without this guard _textBlock.Text NREs.
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
+            Dispatcher.Invoke(() =>
+            {
+                if (_textBlock == null) return;
+                _textBlock.Text = translatedText;
+            });
         }
     }
 }

@@ -63,6 +63,15 @@ namespace RealTrans.Overlay
                 };
                 strokeBrush.BeginAnimation(Brush.OpacityProperty, pulse);
             };
+            // CRITICAL: detach the Forever animation clock before the window
+            // tears down. Without this, when CaptureIndicatorService.Show
+            // replaces this indicator (user pressed ` to re-select, or
+            // SessionManager rebuilt the region), the WPF animation system
+            // keeps callbacks bound to the brush after the window is closed →
+            // NullReferenceException on the next animation tick. Passing
+            // null as the animation argument is the WPF idiom for clearing
+            // an active clock without disposing the brush.
+            Closed += (_, _) => strokeBrush.BeginAnimation(Brush.OpacityProperty, null);
 
             // Tiny badge — small enough to not obscure content, distinct enough that
             // the user knows what the rectangle is.

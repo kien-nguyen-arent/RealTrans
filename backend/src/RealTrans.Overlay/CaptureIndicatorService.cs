@@ -40,22 +40,24 @@ namespace RealTrans.Overlay
             {
                 app.Dispatcher.Invoke(() =>
                 {
-                    var wpfRect = _dpi.PixelsToWpf(new System.Drawing.Rectangle(rect.X, rect.Y, rect.W, rect.H));
-                    var indicator = new CaptureRegionIndicator();
-                    indicator.PositionAt(wpfRect.X, wpfRect.Y, wpfRect.Width, wpfRect.Height);
-                    indicator.Show();
-
-                    _bus.Publish(new StatusMessage("info",
-                        $"session ▸ capture indicator visible · WPF rect ({wpfRect.X:F0},{wpfRect.Y:F0}) {wpfRect.Width:F0}×{wpfRect.Height:F0} · scale {_dpi.ScaleX:F2}x{_dpi.ScaleY:F2}"));
-
-                    // Defensive: replace any leftover indicator from a previous session
-                    // under the same regionId — Hide should have cleaned up but a crashed
-                    // session could leave one behind.
+                    // CRITICAL: tear down the stale indicator BEFORE creating the
+                    // new one. The previous ordering (create+Show new, then Close
+                    // stale) left both windows visible on screen for the duration
+                    // of the two intervening calls — that's the "duplicated
+                    // dashed rectangles" the user saw when pressing ` mid-session.
                     if (_indicators.TryRemove(regionId, out var stale))
                     {
                         try { stale.Close(); } catch { /* best-effort */ }
                     }
+
+                    var wpfRect = _dpi.PixelsToWpf(new System.Drawing.Rectangle(rect.X, rect.Y, rect.W, rect.H));
+                    var indicator = new CaptureRegionIndicator();
+                    indicator.PositionAt(wpfRect.X, wpfRect.Y, wpfRect.Width, wpfRect.Height);
+                    indicator.Show();
                     _indicators[regionId] = indicator;
+
+                    _bus.Publish(new StatusMessage("info",
+                        $"session ▸ capture indicator visible · WPF rect ({wpfRect.X:F0},{wpfRect.Y:F0}) {wpfRect.Width:F0}×{wpfRect.Height:F0} · scale {_dpi.ScaleX:F2}x{_dpi.ScaleY:F2}"));
                 });
             }
             catch (Exception ex)
