@@ -356,8 +356,15 @@ namespace RealTrans.Core.Orchestration
                 // instead of the (never-set) singleton ScreenCaptureConfiguration.CaptureArea
                 // which would otherwise throw "Capture area is not selected" every iteration.
                 tps.CaptureArea = captureRect;
-                tps.IterationDelayOverrideMs = 120;
-                // Require N consecutive identical OCR frames before paying for a translation.
+                // 80 ms ≈ 12.5 Hz OCR polling. Was 120 ms; lower value reduces the
+                // gap between "user finished scrolling" and "translation visible".
+                // WindowsOCR on a small capture region takes ~30-50 ms per call,
+                // so the loop comfortably fits within the budget. Lower than ~60
+                // ms starts saturating the OCR thread without proportional benefit.
+                tps.IterationDelayOverrideMs = 80;
+                // Require N consecutive identical OCR frames before paying for a
+                // translation. Set to 1 in TranslationSession's stabilization
+                // engine for snappier response (see comment there).
                 tps.StabilityCheck = session.IsStable;
             }
 

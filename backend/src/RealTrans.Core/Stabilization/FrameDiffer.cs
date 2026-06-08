@@ -8,7 +8,12 @@ namespace RealTrans.Core.Stabilization
     /// </summary>
     public class FrameDiffer
     {
-        private const double SimilarityThreshold = 0.05; // 5% change required to process
+        // 2.5% change required to consider frames "different" and run OCR. Lower
+        // than the previous 5% so smaller changes (a few words updated on the
+        // page, a cursor flickering, partial scroll) still trigger re-OCR.
+        // Going below ~1% risks chasing compositor jitter — the OCR thread would
+        // spin on noise even when nothing meaningful changed.
+        private const double SimilarityThreshold = 0.025;
 
         private byte[]? _previous;
 

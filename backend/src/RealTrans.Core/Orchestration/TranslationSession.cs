@@ -45,7 +45,16 @@ namespace RealTrans.Core.Orchestration
             _sequencer = sequencer;
             _logger = logger;
             _frameDiffer = new FrameDiffer();
-            _stabilization = new StabilizationEngine();
+            // Stabilization N=1: translate on the FIRST OCR read whose text differs
+            // from the previous one. The class default (2) is anti-flicker tuning
+            // for animated game subtitle rendering — useful when text fades in over
+            // 100-200 ms — but for RealTrans's primary use case (reading static
+            // text on screen and scrolling between sections), it adds an extra
+            // IterationDelayOverrideMs of dead time after every settled change
+            // without any benefit. Cost: an occasional duplicate translation if
+            // the OCR read flickers between two values mid-scroll; the React feed
+            // de-dupes the visual.
+            _stabilization = new StabilizationEngine(requiredConsecutiveFrames: 1);
             _holdTimer = new SubtitleHoldTimer(600);
             _holdTimer.HoldExpired += OnHoldExpired;
             // 6s window before we tell the user nothing's coming through — long enough
