@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,6 +66,19 @@ namespace RealTrans.Shell
             var configStorage = _serviceProvider.GetRequiredService<ConfigurationStorage>();
             configStorage.LoadConfiguration();
 
+            // Sanity check: a stale persisted settings file may have left every OCR
+            // engine disabled (Translumo's default ships Enabled=false for all three
+            // engines). Without this guard, the user lands on the "no-ocr-engine"
+            // error every launch with no obvious way out. Force WindowsOCR back on
+            // if the persisted state has zero enabled engines — the user can still
+            // disable it later via the sidebar OCR controls if they really mean to.
+            var ocrCfg = _serviceProvider.GetRequiredService<OcrGeneralConfiguration>();
+            if (!ocrCfg.OcrConfigurations.Any(c => c.Enabled))
+            {
+                ocrCfg.GetConfiguration<WindowsOCRConfiguration>().Enabled = true;
+                _logger.LogInformation("No OCR engine enabled in persisted config — forced WindowsOCR on.");
+            }
+
             var hotkeys = _serviceProvider.GetRequiredService<Translumo.HotKeys.RealTransHotKeyManager>();
             hotkeys.RegisterAll();
 
@@ -111,8 +125,14 @@ namespace RealTrans.Shell
             });
             services.AddSingleton<TranslationConfiguration>(_ => new TranslationConfiguration
             {
-                TranslateFromLang = Languages.Japanese,
-                TranslateToLang   = Languages.English,
+                // English source: Windows OCR ships English data by default on virtually
+                // every install — no extra OCR pack required. Vietnamese target: Google
+                // translator supports it (DeepL does not). The user can switch live via
+                // the sidebar LanguageSwitcher (settings:set IPC), which mutates this
+                // singleton; the legacy pipeline picks up the change via
+                // TranslationConfiguration.PropertyChanged.
+                TranslateFromLang = Languages.English,
+                TranslateToLang   = Languages.Vietnamese,
                 Translator        = Translators.Google,
             });
             services.AddSingleton<TtsConfiguration>(TtsConfiguration.Default);

@@ -1,6 +1,8 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Shapes;
 
 namespace RealTrans.Overlay
@@ -27,9 +29,13 @@ namespace RealTrans.Overlay
             var canvas = new Canvas();
 
             // Dashed violet border matching the SelectionAreaWindow drag rect.
+            // The stroke is a mutable SolidColorBrush so we can animate its
+            // Opacity (NOT the rectangle's — that would also dim the dashes
+            // before the pulse hits the desired contrast).
+            var strokeBrush = new SolidColorBrush(Color.FromRgb(139, 124, 255));
             _border = new Rectangle
             {
-                Stroke           = new SolidColorBrush(Color.FromRgb(139, 124, 255)),
+                Stroke           = strokeBrush,
                 StrokeThickness  = 2,
                 StrokeDashArray  = new DoubleCollection { 6, 3 },
                 Fill             = Brushes.Transparent,
@@ -41,6 +47,22 @@ namespace RealTrans.Overlay
                 _border.Height = canvas.ActualHeight;
             };
             canvas.Children.Add(_border);
+
+            // Pulse so the user can't miss it on a busy background. 1.2s cycle,
+            // opacity 0.5 ↔ 1.0, auto-reverse, forever.
+            Loaded += (_, _) =>
+            {
+                var pulse = new DoubleAnimation
+                {
+                    From           = 0.55,
+                    To             = 1.0,
+                    Duration       = TimeSpan.FromSeconds(0.6),
+                    AutoReverse    = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut },
+                };
+                strokeBrush.BeginAnimation(Brush.OpacityProperty, pulse);
+            };
 
             // Tiny badge — small enough to not obscure content, distinct enough that
             // the user knows what the rectangle is.

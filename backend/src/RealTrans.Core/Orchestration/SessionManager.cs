@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,8 +12,12 @@ using RealTrans.Core.Stabilization;
 using Translumo.Configuration;
 using Translumo.Infrastructure.Language;
 using Translumo.OCR.Configuration;
+using Translumo.OCR.EasyOCR;
+using Translumo.OCR.Tesseract;
+using Translumo.OCR.WindowsOCR;
 using Translumo.Processing;
 using Translumo.Processing.Interfaces;
+using Translumo.Translation;
 using Translumo.Translation.Configuration;
 
 namespace RealTrans.Core.Orchestration
@@ -58,12 +63,139 @@ namespace RealTrans.Core.Orchestration
             _bus.SessionStart += OnSessionStart;
             _bus.SessionStop += OnSessionStop;
             _bus.RegionDetect += OnRegionDetect;
+            _bus.SettingsSet += OnSettingsSet;
+            _bus.AppReady    += OnAppReady;
+        }
+
+        // Send a snapshot of current translation settings so the JS UI can match
+        // whatever the C# side wound up with after ConfigurationStorage.LoadConfiguration
+        // (which may have overwritten our DI defaults with persisted user values).
+        private void OnAppReady(object? sender, EventArgs e)
+        {
+            try
+            {
+                _bus.Publish(BuildSettingsState());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to publish settings:state on app:ready");
+            }
+        }
+
+        private SettingsStateMessage BuildSettingsState()
+        {
+            var engines = new Dictionary<string, bool>
+            {
+                ["WindowsOCR"] = _ocrCfg.GetConfiguration<WindowsOCRConfiguration>()?.Enabled ?? false,
+                ["Tesseract"]  = _ocrCfg.GetConfiguration<TesseractOCRConfiguration>()?.Enabled ?? false,
+                ["EasyOCR"]    = _ocrCfg.GetConfiguration<EasyOCRConfiguration>()?.Enabled ?? false,
+            };
+            return new SettingsStateMessage(
+                SourceLang: _translationCfg.TranslateFromLang.ToString(),
+                TargetLang: _translationCfg.TranslateToLang.ToString(),
+                Translator: _translationCfg.Translator.ToString(),
+                OcrEngines: engines);
+        }
+
+        // Inbound { translateFromLang?, translateToLang?, translator?, ocrEngines? }
+        // — applied live to the shared singletons. The legacy
+        // TranslationProcessingService subscribes to PropertyChanged on these and
+        // rebuilds OCR engines / translator instances on every change, so all of
+        // these take effect mid-session without needing a restart.
+        private void OnSettingsSet(object? sender, InboundMessage msg)
+        {
+            try
+            {
+                bool changed = false;
+                if (msg.Payload.TryGetProperty("translateFromLang", out var fromEl)
+                    && fromEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var name = fromEl.GetString();
+                    if (Enum.TryParse<Languages>(name, ignoreCase: true, out var fromLang)
+                        && fromLang != _translationCfg.TranslateFromLang)
+                    {
+                        _translationCfg.TranslateFromLang = fromLang;
+                        _bus.Publish(new StatusMessage("info", $"settings ▸ source language → {fromLang}"));
+                        changed = true;
+                    }
+                }
+                if (msg.Payload.TryGetProperty("translateToLang", out var toEl)
+                    && toEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var name = toEl.GetString();
+                    if (Enum.TryParse<Languages>(name, ignoreCase: true, out var toLang)
+                        && toLang != _translationCfg.TranslateToLang)
+                    {
+                        _translationCfg.TranslateToLang = toLang;
+                        _bus.Publish(new StatusMessage("info", $"settings ▸ target language → {toLang}"));
+                        changed = true;
+                    }
+                }
+                if (msg.Payload.TryGetProperty("translator", out var translatorEl)
+                    && translatorEl.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var name = translatorEl.GetString();
+                    if (Enum.TryParse<Translators>(name, ignoreCase: true, out var translator)
+                        && translator != _translationCfg.Translator)
+                    {
+                        _translationCfg.Translator = translator;
+                        _bus.Publish(new StatusMessage("info", $"settings ▸ translator → {translator}"));
+                        changed = true;
+                    }
+                }
+                if (msg.Payload.TryGetProperty("ocrEngines", out var enginesEl)
+                    && enginesEl.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var prop in enginesEl.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind != System.Text.Json.JsonValueKind.True
+                            && prop.Value.ValueKind != System.Text.Json.JsonValueKind.False) continue;
+                        bool enable = prop.Value.GetBoolean();
+                        OcrConfiguration? cfg = prop.Name switch
+                        {
+                            "WindowsOCR" => _ocrCfg.GetConfiguration<WindowsOCRConfiguration>(),
+                            "Tesseract"  => _ocrCfg.GetConfiguration<TesseractOCRConfiguration>(),
+                            "EasyOCR"    => _ocrCfg.GetConfiguration<EasyOCRConfiguration>(),
+                            _ => null,
+                        };
+                        if (cfg != null && cfg.Enabled != enable)
+                        {
+                            cfg.Enabled = enable;
+                            _bus.Publish(new StatusMessage("info",
+                                $"settings ▸ {prop.Name} {(enable ? "enabled" : "disabled")}"));
+                            changed = true;
+                        }
+                    }
+                    // Guardrail: if the user disabled all engines, the next session
+                    // would fail with [no-ocr-engine]. Re-enable WindowsOCR and tell
+                    // them — better UX than silent failure.
+                    if (!_ocrCfg.OcrConfigurations.Any(c => c.Enabled))
+                    {
+                        _ocrCfg.GetConfiguration<WindowsOCRConfiguration>().Enabled = true;
+                        _bus.Publish(new StatusMessage("warn",
+                            "At least one OCR engine must be enabled — re-enabled WindowsOCR."));
+                    }
+                }
+                if (!changed)
+                {
+                    _bus.Publish(new StatusMessage("info", "settings ▸ no change"));
+                }
+                // Echo the new state so the UI can reconcile (e.g. when the
+                // guardrail re-enabled WindowsOCR after a clear-all).
+                _bus.Publish(BuildSettingsState());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to apply settings");
+                _bus.Publish(new ErrorMessage("settings-apply", $"{ex.GetType().Name}: {ex.Message}"));
+            }
         }
 
         private void OnSessionStart(object? sender, InboundMessage msg)
         {
             try
             {
+                _bus.Publish(new StatusMessage("info", "session ▸ received session:start IPC"));
                 var scenarioId = msg.Payload.GetProperty("scenarioId").GetString() ?? "caption";
                 var renderMode = msg.Payload.GetProperty("renderMode").GetString() ?? "replace";
                 var regionsEl = msg.Payload.GetProperty("regions");
@@ -124,28 +256,68 @@ namespace RealTrans.Core.Orchestration
         {
             StopSession(regionId);
 
-            // Check OCR readiness BEFORE constructing the processing service. The
-            // legacy pipeline silently no-ops when the chosen language's OCR pack
-            // is missing (TryCreateFromLanguage returns null → empty GetTextLines).
+            // Granular checkpoint StatusMessages around each step so the user can
+            // see EXACTLY where the pipeline dies — silent forever-stuck is the
+            // symptom we're killing here.
+
+            // Step 1: OCR readiness probe.
+            _bus.Publish(new StatusMessage("info", $"session ▸ probe checking {_translationCfg.TranslateFromLang}"));
             var sourceDescriptor = _languages.GetLanguageDescriptor(_translationCfg.TranslateFromLang);
-            var readiness = OcrLanguageProbe.Check(_ocrCfg, sourceDescriptor);
+            OcrLanguageReadiness readiness;
+            try
+            {
+                readiness = OcrLanguageProbe.Check(_ocrCfg, sourceDescriptor);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "OcrLanguageProbe threw");
+                _bus.Publish(new ErrorMessage("probe-threw", $"{ex.GetType().Name}: {ex.Message}"));
+                return;
+            }
             if (!readiness.Ready)
             {
                 _logger.LogWarning("OCR readiness check failed: {Code} {Message}", readiness.Code, readiness.Message);
                 _bus.Publish(new ErrorMessage(readiness.Code!, readiness.Message!));
                 return;
             }
+            _bus.Publish(new StatusMessage("info", "session ▸ probe ok"));
 
+            // Step 2: Region registration.
             var rectDto = new RectDto(
                 (int)captureRect.X, (int)captureRect.Y,
                 (int)captureRect.Width, (int)captureRect.Height);
             _sink.RegisterRegion(regionId, rectDto, renderMode);
+            _bus.Publish(new StatusMessage("info", $"session ▸ registering region {regionId} at ({rectDto.X},{rectDto.Y}) {rectDto.W}×{rectDto.H}px"));
 
-            // Persistent on-screen marker so the user can see exactly which area
-            // the OCR loop is polling. Hidden on StopSession.
-            _captureIndicator.Show(regionId, rectDto);
+            // Step 3: Capture indicator. Failures here used to be silent (try/catch
+            // → LogWarning only) — now they surface as ErrorMessage in the feed.
+            _bus.Publish(new StatusMessage("info", $"session ▸ showing capture indicator at ({rectDto.X},{rectDto.Y}) {rectDto.W}×{rectDto.H}px"));
+            try
+            {
+                _captureIndicator.Show(regionId, rectDto);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "CaptureIndicator.Show threw");
+                _bus.Publish(new ErrorMessage("capture-indicator", $"{ex.GetType().Name}: {ex.Message}"));
+                // Don't abort — the session can still run without the indicator.
+            }
 
-            var processingService = _services.GetRequiredService<IProcessingService>();
+            // Step 4: Resolve processing service.
+            _bus.Publish(new StatusMessage("info", "session ▸ resolving processing service"));
+            IProcessingService processingService;
+            try
+            {
+                processingService = _services.GetRequiredService<IProcessingService>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resolve IProcessingService");
+                _bus.Publish(new ErrorMessage("resolve-processing-service",
+                    $"{ex.GetType().Name}: {ex.Message}"));
+                _captureIndicator.Hide(regionId);
+                return;
+            }
 
             var sessionLogger = _services.GetRequiredService<ILogger<TranslationSession>>();
             var session = new TranslationSession(
@@ -163,8 +335,22 @@ namespace RealTrans.Core.Orchestration
                 tps.StabilityCheck = session.IsStable;
             }
 
+            // Step 5: Kick off the loop.
+            _bus.Publish(new StatusMessage("info", "session ▸ start processing"));
             _sessions[regionId] = session;
-            session.Start();
+            try
+            {
+                session.Start();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "session.Start() threw");
+                _bus.Publish(new ErrorMessage("session-start", $"{ex.GetType().Name}: {ex.Message}"));
+                _sessions.TryRemove(regionId, out _);
+                _captureIndicator.Hide(regionId);
+                return;
+            }
+            _bus.Publish(new StatusMessage("info", $"session ▸ ready (region={regionId})"));
             _bus.Publish(new TranslationStartedMessage(regionId));
         }
 
@@ -184,6 +370,14 @@ namespace RealTrans.Core.Orchestration
                 StopSession(key);
         }
 
-        public void Dispose() => StopAllSessions();
+        public void Dispose()
+        {
+            _bus.SessionStart -= OnSessionStart;
+            _bus.SessionStop -= OnSessionStop;
+            _bus.RegionDetect -= OnRegionDetect;
+            _bus.SettingsSet -= OnSettingsSet;
+            _bus.AppReady    -= OnAppReady;
+            StopAllSessions();
+        }
     }
 }

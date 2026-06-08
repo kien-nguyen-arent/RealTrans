@@ -98,10 +98,59 @@ namespace RealTrans.Core.Bridge
     /// this in the Original half so the user can verify the OCR is reading
     /// SOMETHING. Throttled by the publisher (typically 1 Hz) to avoid flooding
     /// the IPC bus on the ~8 Hz OCR loop.
+    /// Superseded by <see cref="OcrTickMessage"/> — kept for compat; not emitted.
     /// </summary>
     public record OcrPreviewMessage(string RegionId, string Text) : OutboundMessage
     {
         public override string Type => "ocr:preview";
+    }
+
+    /// <summary>
+    /// Per-iteration OCR telemetry. Emitted on EVERY GetText call (throttled 2 Hz),
+    /// regardless of whether OCR returned text. Lets the UI prove the OCR loop is
+    /// alive: incrementing iteration counter, non-zero capture bytes, char count,
+    /// validity score, and engine type.
+    /// </summary>
+    public record OcrTickMessage(
+        string RegionId,
+        long Iteration,
+        int CaptureBytes,
+        string Text,
+        int CharCount,
+        double ValidityScore,
+        string EngineName,
+        string LastCapturePath) : OutboundMessage
+    {
+        public override string Type => "ocr:tick";
+    }
+
+    /// <summary>
+    /// Live thumbnail of the captured region (≤200 px wide PNG, base64-encoded).
+    /// Emitted at ~0.5 Hz by the OCR previewing provider. Gives the user visual
+    /// proof that capture is targeting the correct pixels.
+    /// </summary>
+    public record CaptureThumbnailMessage(
+        string RegionId,
+        string Base64Png,
+        int Width,
+        int Height) : OutboundMessage
+    {
+        public override string Type => "capture:thumbnail";
+    }
+
+    /// <summary>
+    /// Snapshot of user-facing translation settings — sent on app:ready so JS can
+    /// initialize its UI to match the C# state (which may have been mutated by
+    /// ConfigurationStorage.LoadConfiguration after DI defaults applied).
+    /// </summary>
+    public record SettingsStateMessage(
+        string SourceLang,
+        string TargetLang,
+        string Translator,
+        System.Collections.Generic.Dictionary<string, bool> OcrEngines)
+        : OutboundMessage
+    {
+        public override string Type => "settings:state";
     }
 
     // ── Shared DTOs ───────────────────────────────────────────────────────────

@@ -18,6 +18,21 @@ const App = () => {
   // session is running. Displayed in the Original half of Inline mode so the
   // user can verify OCR is reading SOMETHING even before a translation lands.
   const [latestPreview, setLatestPreview]   = useState(null);
+  // Latest per-iteration OCR telemetry (iter, captureBytes, charCount, score,
+  // engine). Shows a pulsing "alive" row in the Original half.
+  const [latestTick, setLatestTick]         = useState(null);
+  // Latest capture thumbnail (base64 PNG) — visual confirmation that capture
+  // is targeting the right pixels.
+  const [latestThumbnail, setLatestThumbnail] = useState(null);
+
+  // Active translation settings — initialized to the C# defaults so the UI looks
+  // sensible during the brief window before settings:state arrives from C#. The
+  // C# snapshot (sent on app:ready) overwrites these to match whatever persisted
+  // or default state the backend wound up with.
+  const [sourceLang, setSourceLang]   = useState("English");
+  const [targetLang, setTargetLang]   = useState("Vietnamese");
+  const [translator, setTranslator]   = useState("Google");
+  const [ocrEngines, setOcrEngines]   = useState({ WindowsOCR: true, Tesseract: false, EasyOCR: false });
 
   // Mirror the latest values into refs so the bridge handlers — registered once
   // in the useEffect([]) below and never re-registered — read current state instead
@@ -38,6 +53,17 @@ const App = () => {
       if (p.activeScenario) setScenarioId(p.activeScenario);
     });
 
+    // C# snapshot of language pair / translator / OCR engines, sent on app:ready
+    // and re-emitted after every settings:set. Brings the UI in sync with what
+    // the backend actually has (including the guardrail-forced WindowsOCR if the
+    // user disabled everything).
+    RealTransBridge.on("settings:state", (p) => {
+      if (p.sourceLang) setSourceLang(p.sourceLang);
+      if (p.targetLang) setTargetLang(p.targetLang);
+      if (p.translator) setTranslator(p.translator);
+      if (p.ocrEngines) setOcrEngines(p.ocrEngines);
+    });
+
     RealTransBridge.on("translation:result", (p) => {
       setFeed(prev => [...prev.slice(-49), { ...p, kind: "translation" }]);
     });
@@ -56,8 +82,39 @@ const App = () => {
     // Raw OCR preview (throttled 1 Hz on the C# side). Stored as a single latest
     // value, not appended to the feed, so it doesn't pollute history. The Inline
     // layout's Original half renders this beneath any committed source-text rows.
+    // Note: ocr:preview is the legacy envelope; ocr:tick (below) supersedes it
+    // with full telemetry. Kept for back-compat in case anything still emits it.
     RealTransBridge.on("ocr:preview", (p) => {
       setLatestPreview({ text: p.text || "", at: Date.now() });
+    });
+
+    // Per-iteration OCR telemetry — fires on EVERY OCR call (throttled 2 Hz).
+    // The iteration counter incrementing proves the legacy OCR loop is alive
+    // even when text is empty. Char count = 0 + bytes > 0 = OCR reading but
+    // returning nothing. Char count > 0 + score < 2.1 = OCR reading but
+    // predictor rejecting. Char count > 0 + score >= 2.1 = translation imminent.
+    RealTransBridge.on("ocr:tick", (p) => {
+      setLatestTick({
+        iteration:     p.iteration ?? 0,
+        captureBytes:  p.captureBytes ?? 0,
+        text:          p.text || "",
+        charCount:     p.charCount ?? 0,
+        validityScore: p.validityScore ?? 0,
+        engineName:    p.engineName || "?",
+        lastCapturePath: p.lastCapturePath || "",
+        at:            Date.now(),
+      });
+    });
+
+    // Live thumbnail (base64 PNG, ≤200 px wide). Throttled 0.5 Hz. Lets the
+    // user visually confirm the captured region matches what they selected.
+    RealTransBridge.on("capture:thumbnail", (p) => {
+      setLatestThumbnail({
+        base64: p.base64Png || "",
+        width:  p.width || 0,
+        height: p.height || 0,
+        at:     Date.now(),
+      });
     });
 
     RealTransBridge.on("hotkey:fired", ({ action }) => {
@@ -155,6 +212,8 @@ const App = () => {
     setOverlayActive(false);
     setFeed([]);
     setLatestPreview(null);
+    setLatestTick(null);
+    setLatestThumbnail(null);
     RealTransBridge.send("session:stop", { scenarioId });
   };
 
@@ -164,6 +223,35 @@ const App = () => {
       setOverlayActive(false);
     }
     setScenarioId(id);
+  };
+
+  // Live language switching. Updates the JS state immediately for UI feedback,
+  // then mirrors to C# so the OCR engine + translator get rebuilt for the new
+  // pair (via TranslationConfiguration.PropertyChanged in the legacy pipeline).
+  const handleLanguageChange = ({ from, to }) => {
+    const payload = {};
+    if (from && from !== sourceLang) { setSourceLang(from); payload.translateFromLang = from; }
+    if (to && to !== targetLang)     { setTargetLang(to);   payload.translateToLang   = to;   }
+    if (Object.keys(payload).length > 0) {
+      RealTransBridge.send("settings:set", payload);
+    }
+  };
+
+  // Live translator switch (Google / DeepL / Yandex / Papago).
+  const handleTranslatorChange = (name) => {
+    if (name === translator) return;
+    setTranslator(name);
+    RealTransBridge.send("settings:set", { translator: name });
+  };
+
+  // Live OCR engine toggle. C# enforces "at least one engine enabled" — if we
+  // disable everything, the guardrail re-enables WindowsOCR and the echoed
+  // settings:state corrects our optimistic local update.
+  const handleOcrEngineToggle = (name, enabled) => {
+    if (ocrEngines[name] === enabled) return;
+    const next = { ...ocrEngines, [name]: enabled };
+    setOcrEngines(next);
+    RealTransBridge.send("settings:set", { ocrEngines: { [name]: enabled } });
   };
 
   // ── Render ────────────────────────────────────────────────────────
@@ -177,6 +265,13 @@ const App = () => {
         onRenderMode={setRenderMode}
         overlayActive={overlayActive}
         selecting={selecting}
+        sourceLang={sourceLang}
+        targetLang={targetLang}
+        onLanguageChange={handleLanguageChange}
+        translator={translator}
+        onTranslatorChange={handleTranslatorChange}
+        ocrEngines={ocrEngines}
+        onOcrEngineToggle={handleOcrEngineToggle}
         onStart={handleStartSelection}
         onStop={handleStop}
         onPalette={() => setPaletteOpen(true)}
@@ -189,7 +284,11 @@ const App = () => {
         overlayActive={overlayActive}
         feed={feed}
         renderMode={renderMode}
+        sourceLang={sourceLang}
+        targetLang={targetLang}
         latestPreview={latestPreview}
+        latestTick={latestTick}
+        latestThumbnail={latestThumbnail}
         onStop={handleStop}
       />
 

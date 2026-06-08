@@ -155,7 +155,14 @@ namespace RealTrans.Shell
         {
             try
             {
-                var json = JsonSerializer.Serialize(msg, new JsonSerializerOptions
+                // CRITICAL: serialize using the RUNTIME type, not the declared
+                // (abstract) parameter type. JsonSerializer.Serialize<T>(value, …)
+                // infers T from the parameter (OutboundMessage here) and writes
+                // ONLY base-type properties by default — every derived record's
+                // payload (Rect, SourceText, Code, etc.) would be silently dropped,
+                // producing `{"type":"…"}` envelopes with no data. Passing the
+                // runtime type forces full serialization of the derived record.
+                var json = JsonSerializer.Serialize(msg, msg.GetType(), new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });
