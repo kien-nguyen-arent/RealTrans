@@ -7,6 +7,7 @@ using Microsoft.Web.WebView2.Core;
 using RealTrans.Core.Bridge;
 using RealTrans.Core.Configuration;
 using RealTrans.Core.DPI;
+using RealTrans.Overlay;
 using Translumo.HotKeys;
 
 namespace RealTrans.Shell
@@ -44,6 +45,20 @@ namespace RealTrans.Shell
             _bus.SelectionOpen += OnSelectionOpen;
 
             Loaded += OnLoaded;
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            // Exclude the main shell from screen-capture APIs. Without this, a
+            // user who picks a capture rect that overlaps the RealTrans window
+            // (very common in the default inline render mode, where the window
+            // stays visible to show Original/Translated panes) feeds the React
+            // UI's pixels back into OCR. With this call the window renders as
+            // black/transparent in the captured bitmap while remaining fully
+            // visible to the user. Requires Windows 10 2004 — already gated by
+            // the csproj's net8.0-windows10.0.19041.0 target.
+            Win32OverlayHelper.ExcludeFromCapture(this);
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
