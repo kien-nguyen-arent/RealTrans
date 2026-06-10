@@ -10,7 +10,7 @@ jobs:
     runs-on: windows-latest  # For a list of available runner types, refer to
                              # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
     env:
-      Solution_Name: Translumo.sln
+      Solution_Name: backend/RealTrans.sln
       SkipBinariesExtract: true   # Skip download additional binaries, those are set in cproj as a prebuilt step
       
     steps:
@@ -23,7 +23,10 @@ jobs:
     - name: Install .NET Core
       uses: actions/setup-dotnet@v3
       with:
-        dotnet-version: 7.0.x
+        dotnet-version: 8.0.x
         
+    - name: Restore dependencies
+      run: dotnet restore $env:Solution_Name
+
     - name: Build the application
-      run: dotnet build $env:Solution_Name /p:Configuration=Release
+      run: dotnet build $env:Solution_Name /p:Configuration=Release --no-restore
