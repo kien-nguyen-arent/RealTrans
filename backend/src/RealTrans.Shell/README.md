@@ -40,9 +40,9 @@ Envelopes are declared in [`RealTrans.Core/Bridge/IpcMessage.cs`](../RealTrans.C
 | `selection:open` | — | `ShellWindow.OnSelectionOpen` |
 | `session:start` | `{ scenarioId, renderMode, regions: [{id,x,y,w,h}] }` | `SessionManager.OnSessionStart` |
 | `session:stop` | `{ scenarioId }` | `SessionManager.OnSessionStop` |
-| `region:detect`, `region:pin`, `region:unpin` | varies | `SessionManager` / `RegionPinCollection` |
-| `settings:get`, `settings:set` | varies | (handlers reserved; not yet wired to settings UI) |
-| `hotkey:reassign` | varies | (reserved) |
+| `region:detect` | `{ scenarioId, screenRect }` | `SessionManager.OnRegionDetect` |
+| `settings:set` | `{ translateFromLang?, translateToLang?, translator?, ocrEngines? }` | `SessionManager.OnSettingsSet` — applied live; wired to the ControlPanel **and** the Settings modal |
+| `region:pin`, `region:unpin`, `settings:get`, `hotkey:reassign` | varies | declared on the bus, **no subscriber yet** (reserved) |
 
 ### Outbound (C# → JS) — `WebMessageBus.Publish(msg)`
 

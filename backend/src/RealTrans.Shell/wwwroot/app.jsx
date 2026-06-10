@@ -342,7 +342,20 @@ const App = () => {
         scenarioId={scenarioId}
       />
 
-      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        sourceLang={sourceLang}
+        targetLang={targetLang}
+        onLanguageChange={handleLanguageChange}
+        translator={translator}
+        onTranslatorChange={handleTranslatorChange}
+        ocrEngines={ocrEngines}
+        onOcrEngineToggle={handleOcrEngineToggle}
+        renderMode={renderMode}
+        onRenderMode={setRenderMode}
+        overlayActive={overlayActive}
+      />
       <Onboarding open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
       <Notes open={notesOpen} onClose={() => setNotesOpen(false)} />
 
