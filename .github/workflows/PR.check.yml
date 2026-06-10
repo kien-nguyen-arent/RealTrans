@@ -12,6 +12,7 @@ jobs:
     env:
       Solution_Name: backend/RealTrans.sln
       SkipBinariesExtract: true   # Skip download additional binaries, those are set in cproj as a prebuilt step
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # Run checkout@v4/setup-dotnet@v4 on Node 24 (they still default to deprecated Node 20)
       
     steps:
     - name: Checkout
