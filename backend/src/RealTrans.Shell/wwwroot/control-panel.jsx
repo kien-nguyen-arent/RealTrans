@@ -4,24 +4,20 @@
      TranslationFeed — right area: live translation results.
 */
 
-/* ── Mode + overlay-style data ──────────────────────────────────── */
-const MODES = [
-  { id: "anime",   label: "Anime / Video",  sub: "Hardcoded subtitles",   icon: "play"     },
-  { id: "browser", label: "Browser",         sub: "Foreign-language pages", icon: "browser"  },
-  { id: "game",    label: "Game",            sub: "JRPG dialogue & menus",  icon: "joystick" },
-  { id: "manga",   label: "Manga",           sub: "Speech bubbles",         icon: "manga"    },
-  { id: "meeting", label: "Meeting",         sub: "Live captions",          icon: "video"    },
-];
-
+/* ── Overlay-style data ──────────────────────────────────────────── */
+// Per-content "Modes" (anime / browser / game / manga / meeting) used to live
+// here, but the production pipeline treats every captured region the same — the
+// mode was never wired to any behavior. It's been replaced by a "coming soon"
+// placeholder in the panel until smart per-content tuning actually ships.
 const OVERLAY_STYLES = [
   // Inline is the default: no screen overlay, results render in the app's
   // right pane split into Original (top) and Translated (bottom). Great for
   // debugging — you see exactly what OCR is reading and what's being translated.
   { id: "inline",   label: "Inline",   icon: "layers" },
+  // Replace / Ghost draw over the captured screen region via the C# overlay
+  // windows (OverlayManager → ReplaceOverlayWindow / GhostOverlayWindow).
   { id: "replace",  label: "Replace",  icon: "wand"   },
   { id: "ghost",    label: "Ghost",    icon: "eye"    },
-  { id: "parallel", label: "Parallel", icon: "layers" },
-  { id: "card",     label: "Card",     icon: "stack"  },
 ];
 
 // Language options. `id` matches the Translumo.Infrastructure.Language.Languages
@@ -83,7 +79,6 @@ const TRANSLATORS = [
 
 /* ── ControlPanel ────────────────────────────────────────────────── */
 const ControlPanel = ({
-  scenarioId, onScenario,
   renderMode, onRenderMode,
   overlayActive, selecting,
   sourceLang, targetLang, onLanguageChange,
@@ -136,19 +131,19 @@ const ControlPanel = ({
         />
       </div>
 
-      {/* ── Mode selector ── */}
+      {/* ── Mode (future feature) ── */}
       <div className="cp-section">
         <div className="cp-label">Mode</div>
-        <div className="cp-mode-list">
-          {MODES.map(m => (
-            <ModeRow
-              key={m.id}
-              mode={m}
-              active={scenarioId === m.id}
-              disabled={overlayActive}
-              onClick={() => onScenario(m.id)}
-            />
-          ))}
+        <div className="cp-mode-soon">
+          <span className="cp-mode-soon-ico">
+            <Icon name="sparkle" size={14} />
+          </span>
+          <span className="cp-mode-soon-txt">
+            <span className="cp-mode-soon-title">Smart modes coming soon</span>
+            <span className="cp-mode-soon-sub">
+              Per-content tuning for anime, manga, games and more is in development.
+            </span>
+          </span>
         </div>
       </div>
 
@@ -212,26 +207,6 @@ const ControlPanel = ({
     </div>
 
   </div>
-);
-
-const ModeRow = ({ mode, active, disabled, onClick }) => (
-  <button
-    onClick={disabled ? undefined : onClick}
-    className={`cp-mode-row${active ? " active" : ""}${disabled ? " disabled" : ""}`}
-  >
-    <span className="cp-mode-ico">
-      <Icon name={mode.icon} size={14} />
-    </span>
-    <span className="cp-mode-txt">
-      <span className="cp-mode-name">{mode.label}</span>
-      <span className="cp-mode-sub">{mode.sub}</span>
-    </span>
-    {active && (
-      <span className="cp-mode-check">
-        <Icon name="check" size={12} />
-      </span>
-    )}
-  </button>
 );
 
 /* ── OcrEnginePicker ─────────────────────────────────────────────── */
@@ -827,7 +802,7 @@ const ErrorRow = ({ code, message }) => (
   </div>
 );
 
-/* Single-list mode — used by Replace/Ghost/Parallel/Card render modes. */
+/* Single-list mode — used by the Replace / Ghost render modes (anything but Inline). */
 const SingleListTranslationFeed = ({ overlayActive, feed, renderMode, sourceLang, targetLang }) => {
   const feedRef = useRef(null);
 
@@ -933,8 +908,8 @@ const FeedEmpty = () => (
     </div>
     <div className="tf-empty-title">Ready to translate</div>
     <p className="tf-empty-body">
-      Pick a mode on the left, then click <strong>Start translating</strong> to
-      select the region of your screen to translate.
+      Click <strong>Start translating</strong> to select the region of your
+      screen to translate.
     </p>
     <div className="tf-empty-hint">
       Press{" "}

@@ -5,7 +5,6 @@
 */
 
 const App = () => {
-  const [scenarioId, setScenarioId]         = useState("anime");
   const [renderMode, setRenderMode]         = useState("inline");
   const [overlayActive, setOverlayActive]   = useState(false);
   const [paletteOpen, setPaletteOpen]       = useState(false);
@@ -38,7 +37,6 @@ const App = () => {
   // in the useEffect([]) below and never re-registered — read current state instead
   // of stale first-render closures (the user can change scenario / render mode, or
   // toggle selection, before a selection commits).
-  const scenarioIdRef = useRef(scenarioId);
   const renderModeRef = useRef(renderMode);
   const handleStartSelectionRef = useRef(null);
   // overlayActiveRef + handleStopRef power the "ESC-during-area-pick also stops
@@ -48,7 +46,6 @@ const App = () => {
   // never trigger a stop. Mirroring keeps them current.
   const overlayActiveRef = useRef(overlayActive);
   const handleStopRef    = useRef(null);
-  scenarioIdRef.current   = scenarioId;
   renderModeRef.current   = renderMode;
   overlayActiveRef.current = overlayActive;
 
@@ -57,8 +54,7 @@ const App = () => {
     RealTransBridge.ready();
 
     RealTransBridge.on("state:init", (p) => {
-      if (p.renderMode)     setRenderMode(p.renderMode);
-      if (p.activeScenario) setScenarioId(p.activeScenario);
+      if (p.renderMode) setRenderMode(p.renderMode);
     });
 
     // C# snapshot of language pair / translator / OCR engines, sent on app:ready
@@ -139,7 +135,10 @@ const App = () => {
       setSelecting(false);
       setOverlayActive(true);
       RealTransBridge.send("session:start", {
-        scenarioId: scenarioIdRef.current,
+        // scenarioId is vestigial: the C# session:start handler still reads it
+        // (but ignores the value) now that per-content modes are gone. Send a
+        // constant so the payload contract stays satisfied.
+        scenarioId: "default",
         renderMode: renderModeRef.current,
         regions: [{ id: "caption-band", x: p.rect.x, y: p.rect.y, w: p.rect.w, h: p.rect.h }],
       });
@@ -253,20 +252,12 @@ const App = () => {
     setLatestPreview(null);
     setLatestTick(null);
     setLatestThumbnail(null);
-    RealTransBridge.send("session:stop", { scenarioId });
+    RealTransBridge.send("session:stop", {});
   };
   // Mirror handleStop into a ref so the once-registered selection:cancelled
   // bridge listener (above) can invoke the current closure — needed for the
   // "ESC during area-pick also ends translation" path.
   handleStopRef.current = handleStop;
-
-  const handleScenario = (id) => {
-    if (overlayActive) {
-      RealTransBridge.send("session:stop", { scenarioId });
-      setOverlayActive(false);
-    }
-    setScenarioId(id);
-  };
 
   // Live language switching. Updates the JS state immediately for UI feedback,
   // then mirrors to C# so the OCR engine + translator get rebuilt for the new
@@ -302,8 +293,6 @@ const App = () => {
     <div className="app-root">
 
       <ControlPanel
-        scenarioId={scenarioId}
-        onScenario={handleScenario}
         renderMode={renderMode}
         onRenderMode={setRenderMode}
         overlayActive={overlayActive}
@@ -339,7 +328,6 @@ const App = () => {
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onSelect={handlePaletteSelect}
-        scenarioId={scenarioId}
       />
 
       <Settings

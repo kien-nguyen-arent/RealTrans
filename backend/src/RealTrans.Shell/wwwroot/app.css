@@ -270,63 +270,30 @@ button { font-family: inherit; }
   margin-bottom: 7px;
 }
 
-/* Mode list */
-.cp-mode-list {
+/* Mode — "coming soon" placeholder (per-content modes not shipped yet) */
+.cp-mode-soon {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.cp-mode-row {
-  display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 8px 9px;
+  padding: 11px 12px;
   border-radius: 8px;
-  background: transparent;
-  border: 0.5px solid transparent;
-  color: var(--rt-fg-2);
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  width: 100%;
-  transition: background 0.1s var(--rt-ease), border-color 0.1s var(--rt-ease);
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px dashed var(--rt-line-2);
 }
-.cp-mode-row:hover:not(.disabled) {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--rt-line-2);
-}
-.cp-mode-row.active {
-  background: rgba(139, 124, 255, 0.12);
-  border-color: rgba(139, 124, 255, 0.28);
-  color: var(--rt-fg);
-}
-.cp-mode-row.disabled { cursor: default; opacity: 0.55; }
-
-.cp-mode-ico {
+.cp-mode-soon-ico {
   width: 28px;
   height: 28px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(139, 124, 255, 0.14);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--rt-fg-3);
+  color: var(--rt-accent-bright);
   flex-shrink: 0;
 }
-.cp-mode-row.active .cp-mode-ico {
-  background: rgba(139, 124, 255, 0.18);
-  color: var(--rt-accent-bright);
-}
-
-.cp-mode-txt  { flex: 1; min-width: 0; }
-.cp-mode-name { font-size: 12.5px; font-weight: 500; }
-.cp-mode-sub  { font-size: 10.5px; color: var(--rt-fg-3); margin-top: 1px; }
-.cp-mode-check {
-  color: var(--rt-accent-bright);
-  display: flex;
-  align-items: center;
-}
+.cp-mode-soon-txt   { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cp-mode-soon-title { font-size: 12.5px; font-weight: 500; color: var(--rt-fg-2); }
+.cp-mode-soon-sub   { font-size: 10.5px; color: var(--rt-fg-3); line-height: 1.45; }
 
 /* Overlay style */
 .cp-overlay-grid {

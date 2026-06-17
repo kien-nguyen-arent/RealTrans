@@ -156,7 +156,7 @@ const RecognitionPane = ({ ocrEngines, onOcrEngineToggle, overlayActive }) => (
 // the ControlPanel's "Overlay style").
 const AppearancePane = ({ renderMode, onRenderMode }) => (
   <div>
-    <SectionHeader title="Overlay style" sub="How translations are shown. Inline keeps them in this window; Replace / Ghost / Parallel / Card draw over the captured region." />
+    <SectionHeader title="Overlay style" sub="How translations are shown. Inline keeps them in this window; Replace and Ghost draw over the captured region." />
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
       {OVERLAY_STYLES.map(s => (
         <button
