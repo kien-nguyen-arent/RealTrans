@@ -75,7 +75,9 @@ const Palette = ({ open, onClose, onSelect }) => {
       }} />
       <div style={{
         position: "absolute",
-        top: "12%", left: "50%", transform: "translateX(-50%)",
+        // Center with left:50% + negative half-width margin, not translateX(-50%):
+        // rt-pop-in animates `transform`, which would clobber the centering shift.
+        top: "12%", left: "50%", marginLeft: -270,
         width: 540, zIndex: 51,
         animation: "rt-pop-in 0.22s var(--rt-ease-2) both",
       }}>

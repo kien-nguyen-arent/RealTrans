@@ -37,7 +37,11 @@ const Settings = ({
         zIndex: 80, animation: "rt-fade-in 0.2s var(--rt-ease) both",
       }}/>
       <div style={{
-        position: "absolute", top: "8%", left: "50%", transform: "translateX(-50%)",
+        // Center horizontally with left:50% + a negative half-width margin rather
+        // than translateX(-50%). The rt-pop-in animation animates `transform`
+        // (translateY + scale), which would override an inline translateX and
+        // leave the panel shifted ~half a window-width to the right.
+        position: "absolute", top: "8%", left: "50%", marginLeft: -360,
         zIndex: 81, width: 720, maxHeight: "84%",
         animation: "rt-pop-in 0.28s var(--rt-ease-2) both",
       }}>
