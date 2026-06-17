@@ -1,9 +1,9 @@
 /* palette.jsx — Command palette: the Raycast-style entry point.
    Opens on hotkey. Always anchored top-center.
-   Holds "Translate region", recent pinned regions, languages, modes, settings.
+   Holds "Translate region", recent pinned regions, languages, settings.
 */
 
-const PALETTE_COMMANDS = (scenarioId) => {
+const PALETTE_COMMANDS = () => {
   const base = [
     { id: "translate-region", label: "Translate a region", sub: "Draw on screen or smart-snap to a UI element", kbd: ["Enter"], icon: "crosshair", primary: true, action: "select" },
     { id: "translate-window", label: "Translate this window", sub: "Auto-detect all text in the active window", kbd: ["⌥", "Enter"], icon: "stack", action: "translate-window" },
@@ -14,26 +14,19 @@ const PALETTE_COMMANDS = (scenarioId) => {
     { id: "recent-2", label: "FFXIV — main quest log", sub: "JA → EN · pinned · 4h ago", kbd: ["2"], icon: "joystick", section: "Recent", action: "recent" },
     { id: "recent-3", label: "Twitter — @yamada_d feed", sub: "JA → EN · 1d ago", kbd: ["3"], icon: "browser", section: "Recent", action: "recent" },
   ];
-  const modes = [
-    { id: "mode-doc", label: "Mode · Document", sub: "Tuned for long-form text", icon: "browser", section: "Modes", action: "mode" },
-    { id: "mode-sub", label: "Mode · Subtitles", sub: "Auto-track, smooth fade", icon: "play", section: "Modes", action: "mode" },
-    { id: "mode-game", label: "Mode · Gaming", sub: "Pinned regions, follow window", icon: "joystick", section: "Modes", action: "mode" },
-    { id: "mode-manga", label: "Mode · Manga", sub: "Auto-detect bubbles", icon: "manga", section: "Modes", action: "mode" },
-    { id: "mode-live", label: "Mode · Live captions", sub: "Audio + screen, speaker-aware", icon: "video", section: "Modes", action: "mode" },
-  ];
   const meta = [
     { id: "settings", label: "Settings…", sub: "Hotkeys, languages, appearance", icon: "settings", section: "More", action: "settings" },
     { id: "lang", label: "Change languages", sub: "Currently: 日本語 → English", icon: "swap", section: "More", action: "lang" },
   ];
-  return [...base, ...recents, ...modes, ...meta];
+  return [...base, ...recents, ...meta];
 };
 
-const Palette = ({ open, onClose, onSelect, scenarioId }) => {
+const Palette = ({ open, onClose, onSelect }) => {
   const [q, setQ] = useState("");
   const [cursor, setCursor] = useState(0);
   const inputRef = useRef(null);
 
-  const all = useMemo(() => PALETTE_COMMANDS(scenarioId), [scenarioId]);
+  const all = useMemo(() => PALETTE_COMMANDS(), []);
   const filtered = useMemo(() => {
     if (!q.trim()) return all;
     const s = q.toLowerCase();
