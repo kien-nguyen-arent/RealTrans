@@ -158,12 +158,19 @@ namespace RealTrans.Shell
             services.AddSingleton<TtsConfiguration>(TtsConfiguration.Default);
             services.AddSingleton<ScreenCaptureConfiguration>();
             services.AddSingleton<LanguageService>();
-            services.AddSingleton<TextValidityPredictor>();
+            // Transient (NOT singleton): TranslationProcessingService is transient and
+            // disposes its injected TextDetectionProvider — which in turn disposes its
+            // TextValidityPredictor — on session stop (TranslationSession.Dispose →
+            // processingService.Dispose). If these were singletons, the first Stop would
+            // tear down app-wide instances that the next Start then reuses in a disposed
+            // state. Registering them transient makes each session own its own OCR text
+            // pipeline, so disposal is self-contained.
+            services.AddTransient<TextValidityPredictor>();
             // Substitute the legacy TextDetectionProvider with a subclass that emits
             // raw OCR text as IPC OcrPreviewMessage on every primary-OCR call (throttled
             // 1 Hz). The legacy TranslationProcessingService injects the base type and
             // receives our subclass via virtual dispatch on GetText.
-            services.AddSingleton<TextDetectionProvider, PreviewingTextDetectionProvider>();
+            services.AddTransient<TextDetectionProvider, PreviewingTextDetectionProvider>();
             services.AddSingleton<TextResultCacheService>();
             services.AddSingleton<TextProcessingConfiguration>(new TextProcessingConfiguration());
             services.AddSingleton<ICapturerFactory, ScreenCapturerFactory>();

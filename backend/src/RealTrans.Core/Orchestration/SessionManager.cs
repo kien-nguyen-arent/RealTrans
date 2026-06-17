@@ -211,7 +211,7 @@ namespace RealTrans.Core.Orchestration
             {
                 _bus.Publish(new StatusMessage("info", "session ▸ received session:start IPC"));
                 var scenarioId = msg.Payload.GetProperty("scenarioId").GetString() ?? "caption";
-                var renderMode = msg.Payload.GetProperty("renderMode").GetString() ?? "replace";
+                var renderMode = msg.Payload.GetProperty("renderMode").GetString() ?? "inline";
                 var regionsEl = msg.Payload.GetProperty("regions");
 
                 foreach (var regionEl in regionsEl.EnumerateArray())
