@@ -362,8 +362,12 @@ namespace RealTrans.Core.Orchestration
                 // so the loop comfortably fits within the budget. Lower than ~60
                 // ms starts saturating the OCR thread without proportional benefit.
                 tps.IterationDelayOverrideMs = 80;
-                // Require N consecutive identical OCR frames before paying for a
-                // translation. Set to 1 in TranslationSession's stabilization
+                // Pixel-level gate (before OCR): skip the OCR/translate pipeline entirely while the
+                // captured region is visually unchanged, so a static subtitle costs almost no CPU.
+                // Runs ahead of StabilityCheck.
+                tps.FrameCheck = session.ShouldProcessFrame;
+                // Text-level gate (after OCR): require N consecutive identical OCR frames before
+                // paying for a translation. Set to 1 in TranslationSession's stabilization
                 // engine for snappier response (see comment there).
                 tps.StabilityCheck = session.IsStable;
             }
