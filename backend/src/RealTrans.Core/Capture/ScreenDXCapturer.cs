@@ -98,16 +98,27 @@ namespace Translumo.Services
         private byte[] MakeScreenshotInternal(RectangleF captureArea, int curAttempt)
         {
             SharpDX.DXGI.Resource screenResource = null;
+            // CRITICAL: capture the duplicated-output reference into a local before
+            // the first use. Dispose() runs on the UI thread (called from
+            // TranslationSession.Dispose during session restart) and nulls
+            // _duplicatedOutput / _device while the capture loop on a background
+            // thread is mid-call. Without this snapshot, the access on the next
+            // line throws NullReferenceException instead of a clean CaptureException
+            // the retry/abort logic can handle. Same reasoning for _device below.
+            var duplicatedOutput = _duplicatedOutput;
+            var device = _device;
+            if (duplicatedOutput == null || device == null || !_initalized)
+                throw new CaptureException("Capturer disposed during frame acquisition");
             try
             {
-                var resultAcquire = _duplicatedOutput.TryAcquireNextFrame(100, out _, out screenResource);
+                var resultAcquire = duplicatedOutput.TryAcquireNextFrame(100, out _, out screenResource);
                 if (!resultAcquire.Success)
                     throw new CaptureException("Failed to acquire frame", resultAcquire.Code);
 
                 using (var screenTexture2D = screenResource.QueryInterface<Texture2D>())
-                    _device.ImmediateContext.CopyResource(screenTexture2D, _screenTexture);
+                    device.ImmediateContext.CopyResource(screenTexture2D, _screenTexture);
 
-                var mapSource = _device.ImmediateContext.MapSubresource(_screenTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
+                var mapSource = device.ImmediateContext.MapSubresource(_screenTexture, 0, MapMode.Read, SharpDX.Direct3D11.MapFlags.None);
 
                 using (var bitmap = new Bitmap(_width, _height, PixelFormat.Format32bppArgb))
                 {
@@ -121,19 +132,28 @@ namespace Translumo.Services
                         destPtr = IntPtr.Add(destPtr, mapDest.Stride);
                     }
                     bitmap.UnlockBits(mapDest);
-                    _device.ImmediateContext.UnmapSubresource(_screenTexture, 0);
+                    device.ImmediateContext.UnmapSubresource(_screenTexture, 0);
                     return bitmap.Clone(captureArea, bitmap.PixelFormat).ToBytes(ImageFormat.Tiff);
                 }
             }
+            catch (CaptureException) when (curAttempt >= CaptureAttempts || !_initalized) { throw; }
+            catch (Exception) when (curAttempt >= CaptureAttempts || !_initalized) { throw; }
             catch (Exception)
             {
-                if (curAttempt >= CaptureAttempts) throw;
                 Thread.Sleep(AttemptDelayMs);
                 return MakeScreenshotInternal(captureArea, ++curAttempt);
             }
             finally
             {
-                try { screenResource?.Dispose(); _duplicatedOutput.ReleaseFrame(); } catch { }
+                // Same null-snapshot pattern in finally — Dispose could have run
+                // between the try-entry snapshot and here, in which case the
+                // ReleaseFrame call would NRE on a stale field. Use the local.
+                try
+                {
+                    screenResource?.Dispose();
+                    duplicatedOutput?.ReleaseFrame();
+                }
+                catch { }
             }
         }
     }

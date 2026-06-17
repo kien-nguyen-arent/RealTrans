@@ -24,10 +24,12 @@
 <script type="text/babel" src="palette.jsx"></script>
 <script type="text/babel" src="selection.jsx"></script>
 <script type="text/babel" src="onboarding.jsx"></script>
+<!-- Production control panel + translation feed. Loads BEFORE settings.jsx because
+     it defines the shared pickers (LanguageSwitcher/TranslatorPicker/OcrEnginePicker)
+     and OVERLAY_STYLES that the settings modal reuses. -->
+<script type="text/babel" src="control-panel.jsx"></script>
 <script type="text/babel" src="settings.jsx"></script>
 <script type="text/babel" src="notes.jsx"></script>
-<!-- Production control panel + translation feed -->
-<script type="text/babel" src="control-panel.jsx"></script>
 <!-- WebView2 IPC bridge (must load before app.jsx) -->
 <script src="bridge.js"></script>
 <!-- Main entry point -->

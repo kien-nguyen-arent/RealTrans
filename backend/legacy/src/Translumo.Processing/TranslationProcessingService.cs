@@ -468,6 +468,14 @@ namespace Translumo.Processing
 
         public void Dispose()
         {
+            // Unsubscribe the config handlers wired up in the ctor. These configs are
+            // long-lived singletons; without unsubscribing, every disposed processing
+            // service stays reachable via the handler and keeps reacting to settings
+            // changes (rebuilding engines/translator on a dead instance) — a handler
+            // leak that compounds across Start/Stop cycles.
+            _translationConfiguration.PropertyChanged -= TranslationConfigurationOnPropertyChanged;
+            _ocrGeneralConfiguration.PropertyChanged -= OcrGeneralConfigurationOnPropertyChanged;
+            _ttsConfiguration.PropertyChanged -= TtsConfigurationOnPropertyChanged;
             _ttsEngine.Dispose();
             _textProvider.Dispose();
             _capturer?.Dispose();

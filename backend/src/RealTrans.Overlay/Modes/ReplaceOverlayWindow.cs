@@ -41,8 +41,21 @@ namespace RealTrans.Overlay.Modes
 
         public override void UpdateTranslation(string translatedText, string renderMode)
         {
+            // Race guard. OverlayManager closes this window when the user switches
+            // render mode (Replace → Ghost → Replace etc.) mid-session, but a
+            // TranslationResultMessage already queued through the WebMessageBus
+            // can still reach this method after Close(). Without this guard the
+            // Invoke lambda fires on a shut-down Dispatcher and the WPF runtime
+            // throws on _textBlock.Text — a NullReferenceException surfaces in
+            // SessionManager's error path.
+            if (Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished) return;
             Dispatcher.Invoke(() =>
             {
+                // Belt-and-braces: even if the dispatcher is up, _textBlock /
+                // _background could be null on a partially-constructed window
+                // (e.g., if Window.Show() hasn't fully laid out yet).
+                if (_textBlock == null || _background == null) return;
+
                 _textBlock.Text = translatedText;
 
                 // Fade-in on text change for visual smoothness
