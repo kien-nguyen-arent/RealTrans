@@ -49,6 +49,15 @@ namespace Translumo.Processing
         /// </summary>
         public Func<string, bool> StabilityCheck { get; set; }
 
+        /// <summary>
+        /// Optional pixel-level gate evaluated immediately after screen capture, before any OCR runs.
+        /// Return false to skip the entire OCR/translate pipeline for this capture without touching any
+        /// downstream state, so the next iteration re-evaluates a fresh capture. Used by RealTrans to
+        /// suppress the (relatively expensive) OCR pass while the captured region is visually unchanged,
+        /// which is where most idle CPU is otherwise burned. Runs ahead of <see cref="StabilityCheck"/>.
+        /// </summary>
+        public Func<byte[], bool> FrameCheck { get; set; }
+
         private readonly ICapturerFactory _capturerFactory;
         private readonly IChatTextMediator _chatTextMediator;
         private readonly OcrEnginesFactory _enginesFactory;
@@ -223,6 +232,15 @@ namespace Translumo.Processing
                         byte[] screenshot = CaptureArea.IsEmpty
                             ? _capturer.CaptureScreen()
                             : _capturer.CaptureScreen(CaptureArea);
+                        // Pixel-level gate (before OCR): when the captured region hasn't changed,
+                        // skip the whole OCR/translate pipeline so we don't pay for primary+secondary
+                        // OCR on identical frames. The gate (FrameGate) holds a short settle window
+                        // open after each change so this never starves the StabilityCheck quorum below.
+                        if (FrameCheck != null && !FrameCheck(screenshot))
+                        {
+                            lastIterationType = IterationType.Short;
+                            continue;
+                        }
                         var primaryDetected = _textProvider.GetText(primaryOcr, screenshot);
                         lastIterationType = IterationType.Short;
                         if (primaryDetected.ValidityScore == 0)

@@ -19,7 +19,7 @@ namespace RealTrans.Core.Orchestration
         public RectangleF CaptureRect { get; }
 
         private readonly IProcessingService _processingService;
-        private readonly FrameDiffer _frameDiffer;
+        private readonly FrameGate _frameGate;
         private readonly StabilizationEngine _stabilization;
         private readonly SubtitleHoldTimer _holdTimer;
         private readonly NoResultWatchdog _noResultWatchdog;
@@ -44,7 +44,12 @@ namespace RealTrans.Core.Orchestration
             _bus = bus;
             _sequencer = sequencer;
             _logger = logger;
-            _frameDiffer = new FrameDiffer();
+            // Pixel gate: skip OCR entirely while the captured region is visually unchanged.
+            // The settle window (2) keeps admitting a couple of static frames after a change so
+            // the text-stability gate below still gets a clean read even when text renders over a
+            // few frames, then OCR is suppressed while the region stays static. Sized one above
+            // the N=1 stabilization so it never starves it.
+            _frameGate = new FrameGate(settleFrames: 2);
             // Stabilization N=1: translate on the FIRST OCR read whose text differs
             // from the previous one. The class default (2) is anti-flicker tuning
             // for animated game subtitle rendering — useful when text fades in over
@@ -71,8 +76,17 @@ namespace RealTrans.Core.Orchestration
         /// </summary>
         public bool IsStable(string text) => _stabilization.IsStable(text);
 
+        /// <summary>
+        /// Pixel-level gate evaluated by TranslationProcessingService right after capture, before
+        /// any OCR runs. Returns false to skip the OCR/translate pipeline for the current capture,
+        /// avoiding the OCR cost while the region is visually unchanged. See <see cref="FrameGate"/>
+        /// for the settle-window behaviour that keeps this from starving <see cref="IsStable"/>.
+        /// </summary>
+        public bool ShouldProcessFrame(byte[] frame) => _frameGate.ShouldProcess(frame);
+
         public void Start()
         {
+            _frameGate.Reset();
             _stabilization.Reset();
             _holdTimer.Cancel();
             _firstResultSeen = false;
