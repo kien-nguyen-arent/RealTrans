@@ -49,7 +49,11 @@ namespace Translumo.Processing.TextProcessing
                 {
                     ValidityScore = scorePrediction,
                     Text = _configuration.KeepFormatting ? string.Join(Environment.NewLine, detectedLines) :  resultText,
-                    ValidatedText = validatedText
+                    ValidatedText = validatedText,
+                    // Snapshot the geometry now (engines that don't report it return
+                    // null). Captured immediately after GetTextLines so a later call
+                    // on the same reused engine instance can't overwrite it.
+                    TextBounds = (ocrEngine as IOcrTextBoundsProvider)?.LastTextBounds,
                 };
             }
             catch (Exception ex)

@@ -72,8 +72,11 @@ namespace RealTrans.Overlay
             }
             _lastApplied[update.RegionId] = update.SequenceId;
 
+            // Prefer the tight text box (over the original text) when the OCR
+            // engine reported geometry; otherwise fall back to the whole region.
+            var posRect = update.TextRect is { W: > 0, H: > 0 } tr ? tr : update.Rect;
             var wpfRect = _dpi.PixelsToWpf(new System.Drawing.Rectangle(
-                update.Rect.X, update.Rect.Y, update.Rect.W, update.Rect.H));
+                posRect.X, posRect.Y, posRect.W, posRect.H));
 
             if (!_windows.TryGetValue(update.RegionId, out var window) ||
                 window.GetType() != GetWindowTypeForMode(update.RenderMode))

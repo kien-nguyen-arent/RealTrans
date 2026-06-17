@@ -279,7 +279,7 @@ namespace Translumo.Processing
 
                         sequentialText = false;
                         //resultLogger.LogResults(detectedResults.Select(res => res.Result), screenshot);
-                        activeTranslationTasks.Add(TranslateTextAsync(bestDetected.Text, iterationId));
+                        activeTranslationTasks.Add(TranslateTextAsync(bestDetected.Text, iterationId, bestDetected.TextBounds));
                     }
                 }
                 catch (CaptureException ex)
@@ -340,7 +340,7 @@ namespace Translumo.Processing
                     // TODO: sometimes one of task (win tts) is not complete long time and translation is not working
                     Task.WaitAll(taskResults);
                     TextDetectionResult bestDetected = GetBestDetectionResult(taskResults, 3);
-                    translationTask = TranslateTextAsync(bestDetected.Text, Guid.NewGuid());
+                    translationTask = TranslateTextAsync(bestDetected.Text, Guid.NewGuid(), bestDetected.TextBounds);
                 }
 
                 translationTask.Wait(TRANSLATION_TIMEOUT_MS);
@@ -362,7 +362,7 @@ namespace Translumo.Processing
             }
         }
 
-        private async Task TranslateTextAsync(string text, Guid iterationId)
+        private async Task TranslateTextAsync(string text, Guid iterationId, Rectangle? textBounds)
         {
             var started = DateTime.UtcNow;
             var translation = await _translator.TranslateTextAsync(text);
@@ -371,7 +371,7 @@ namespace Translumo.Processing
                 var elapsed = DateTime.UtcNow - started;
                 Interlocked.Exchange(ref _lastTranslatedTextTicks, DateTime.UtcNow.Ticks);
                 if (_chatTextMediator is Interfaces.ITranslationResultSink sink && !string.IsNullOrEmpty(RegionId))
-                    sink.SendRegionResult(RegionId, text, translation, elapsed);
+                    sink.SendRegionResult(RegionId, text, translation, elapsed, textBounds);
                 else
                     _chatTextMediator.SendText(translation, true);
                 _ttsEngine.SpeechText(translation);

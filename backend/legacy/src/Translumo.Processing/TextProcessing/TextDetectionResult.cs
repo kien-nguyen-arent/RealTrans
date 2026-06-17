@@ -16,6 +16,13 @@ namespace Translumo.Processing.TextProcessing
 
         public LanguageDescriptor Language { get; }
 
+        /// <summary>
+        /// Pixel bounding box of the recognized text within the captured region
+        /// (source-image coordinate space), or null when the source engine doesn't
+        /// report geometry. Used to position the overlay tightly over the original.
+        /// </summary>
+        public System.Drawing.Rectangle? TextBounds { get; set; }
+
         private const float LONG_SCORE_THRESHOLD = 3.81f;
         private const float EQUAL_TOLERANCE = 0.001f;
 

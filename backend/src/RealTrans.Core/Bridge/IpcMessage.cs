@@ -58,7 +58,12 @@ namespace RealTrans.Core.Bridge
         RectDto Rect,
         string RenderMode,
         string TranslatedText,
-        uint SequenceId) : OutboundMessage
+        uint SequenceId,
+        // Tight bounding box of the detected source text, in screen pixels. When
+        // present, OverlayManager positions the overlay here (over the original
+        // text) instead of across the whole capture Rect. Null when the OCR engine
+        // reports no geometry — overlay then falls back to Rect.
+        RectDto? TextRect = null) : OutboundMessage
     {
         public override string Type => "overlay:update";
     }

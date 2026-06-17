@@ -20,20 +20,30 @@ namespace RealTrans.Overlay.Modes
             _textBlock = new TextBlock
             {
                 Foreground = Brushes.White,
-                FontSize = 22,
+                FontSize = 28,                       // upper bound; the Viewbox scales down to fit
                 FontWeight = FontWeights.SemiBold,
-                TextWrapping = TextWrapping.Wrap,
+                TextWrapping = TextWrapping.NoWrap,
                 TextAlignment = TextAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(12, 6, 12, 6),
+            };
+
+            // Uniform + DownOnly: shrink the translation to fit the (tight) text box
+            // so it matches the original text's footprint, and never enlarge past the
+            // base FontSize — which also keeps the fallback (box == whole region) from
+            // ballooning. The window is positioned over the original text by
+            // OverlayManager using the OCR-detected bounds.
+            var fit = new Viewbox
+            {
+                Child = _textBlock,
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Margin = new Thickness(8, 4, 8, 4),
             };
 
             _background = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(230, 10, 10, 15)),
                 CornerRadius = new CornerRadius(6),
-                Child = _textBlock,
+                Child = fit,
             };
 
             Content = _background;

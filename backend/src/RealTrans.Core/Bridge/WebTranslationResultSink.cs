@@ -29,7 +29,8 @@ namespace RealTrans.Core.Bridge
 
         public void UnregisterRegion(string regionId) => _regionMeta.TryRemove(regionId, out _);
 
-        public void SendRegionResult(string regionId, string sourceText, string translatedText, TimeSpan elapsed)
+        public void SendRegionResult(string regionId, string sourceText, string translatedText, TimeSpan elapsed,
+            System.Drawing.Rectangle? textBounds)
         {
             uint seq = _sequencer.Next();
             if (!_regionMeta.TryGetValue(regionId, out var meta))
@@ -45,7 +46,30 @@ namespace RealTrans.Core.Bridge
                 meta.Rect,
                 meta.RenderMode,
                 translatedText,
-                seq));
+                seq,
+                ToScreenTextRect(meta.Rect, textBounds)));
+        }
+
+        /// <summary>
+        /// Offsets a region-local OCR text box by the region's screen origin and
+        /// clamps it to the region, yielding a screen-pixel rect for the overlay.
+        /// Returns null when there's no usable geometry (overlay falls back to the
+        /// full region rect). Pure — kept static for clarity/testability.
+        /// </summary>
+        internal static RectDto? ToScreenTextRect(RectDto region, System.Drawing.Rectangle? localBounds)
+        {
+            if (localBounds is not { Width: > 0, Height: > 0 } b) return null;
+            if (region.W <= 0 || region.H <= 0) return null;
+
+            // Clamp the local box to the region (defends against sub-pixel rounding
+            // in the OCR-image → source mapping).
+            int x = Math.Clamp(b.X, 0, region.W);
+            int y = Math.Clamp(b.Y, 0, region.H);
+            int w = Math.Min(b.Width, region.W - x);
+            int h = Math.Min(b.Height, region.H - y);
+            if (w <= 0 || h <= 0) return null;
+
+            return new RectDto(region.X + x, region.Y + y, w, h);
         }
 
         // Legacy IChatTextMediator overloads. Translumo's TranslationProcessingService

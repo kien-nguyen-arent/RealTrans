@@ -17,18 +17,26 @@ namespace RealTrans.Overlay.Modes
             _textBlock = new TextBlock
             {
                 Foreground = Brushes.White,
-                FontSize = 21,
-                TextWrapping = TextWrapping.Wrap,
+                FontSize = 28,                       // upper bound; the Viewbox scales down to fit
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.NoWrap,
                 TextAlignment = TextAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(16, 8, 16, 8),
+            };
+
+            // Uniform + DownOnly: shrink the translation to fit the (tight) text box
+            // matching the original's footprint, never enlarging past the base size.
+            var fit = new Viewbox
+            {
+                Child = _textBlock,
+                Stretch = Stretch.Uniform,
+                StretchDirection = StretchDirection.DownOnly,
+                Margin = new Thickness(10, 6, 10, 6),
             };
 
             Content = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(215, 80, 60, 200)), // violet tint
-                Child = _textBlock,
+                Child = fit,
             };
         }
 
