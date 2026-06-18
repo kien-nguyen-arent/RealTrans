@@ -17,7 +17,7 @@ namespace RealTrans.Overlay.Modes
             _textBlock = new TextBlock
             {
                 Foreground = Brushes.White,
-                FontSize = 20,
+                FontSize = 14,                       // fixed normal reading size (~code-editor size)
                 FontWeight = FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
@@ -26,9 +26,9 @@ namespace RealTrans.Overlay.Modes
                 Margin = new Thickness(12, 6, 12, 6),
             };
 
-            // Wrap at the original text's width and grow the panel's HEIGHT to fit,
-            // instead of shrinking the font into a tight box (which made a longer
-            // translation, e.g. JP→VI, microscopic). Width + font set in PositionAt.
+            // Fixed, normal font size; wrap at the original text's width and grow the
+            // panel's HEIGHT to fit. (Deriving the font from the detected box height
+            // was unreliable — too big for multi-line source.)
             SizeToContent = SizeToContent.Height;
             MinWidth = 140;
             Content = new Border
@@ -38,13 +38,10 @@ namespace RealTrans.Overlay.Modes
             };
         }
 
-        // Pin top-left + width to the OCR-detected text box, size the font to the
-        // original line height (clamped readable), and let SizeToContent grow the
-        // height to fit the wrapped translation.
+        // Pin top-left + width to the OCR-detected text box; the font is fixed (set
+        // in the ctor) and SizeToContent grows the height to fit the wrapped text.
         public override void PositionAt(double x, double y, double width, double height)
         {
-            if (_textBlock != null)
-                _textBlock.FontSize = System.Math.Clamp(height * 0.6, 12, 24);
             Left = x;
             Top = y;
             Width = width;

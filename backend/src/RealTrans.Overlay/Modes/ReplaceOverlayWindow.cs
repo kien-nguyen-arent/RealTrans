@@ -20,7 +20,7 @@ namespace RealTrans.Overlay.Modes
             _textBlock = new TextBlock
             {
                 Foreground = Brushes.White,
-                FontSize = 20,
+                FontSize = 14,                       // fixed normal reading size (~code-editor size)
                 FontWeight = FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
@@ -36,23 +36,19 @@ namespace RealTrans.Overlay.Modes
                 Child = _textBlock,
             };
 
-            // Wrap the translation at the original text's width and grow the panel's
-            // HEIGHT to fit it, rather than shrinking the font into a tight box.
-            // (The old Viewbox approach put the text on one line and scaled it down
-            // to the box width — a longer translation, e.g. JP→VI, became
-            // microscopic.) Width + font are set per-update in PositionAt.
+            // Fixed, normal font size; wrap the translation at the original text's
+            // width and grow the panel's HEIGHT to fit it. (Deriving the font from
+            // the detected box height was unreliable — too big for multi-line source.)
             SizeToContent = SizeToContent.Height;
             MinWidth = 140;
             Content = _background;
         }
 
-        // OverlayManager hands us the OCR-detected text box. Pin top-left + width to
-        // it, size the font to the original line height (clamped readable), and let
-        // SizeToContent grow the height to fit the wrapped translation.
+        // Pin the panel's top-left + width to the OCR-detected text box; the font is
+        // fixed (set in the ctor) and SizeToContent grows the height to fit the
+        // wrapped translation.
         public override void PositionAt(double x, double y, double width, double height)
         {
-            if (_textBlock != null)
-                _textBlock.FontSize = System.Math.Clamp(height * 0.6, 12, 24);
             Left = x;
             Top = y;
             Width = width;
