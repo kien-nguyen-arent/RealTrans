@@ -366,6 +366,10 @@ namespace RealTrans.Core.Orchestration
                 // translation. Set to 1 in TranslationSession's stabilization
                 // engine for snappier response (see comment there).
                 tps.StabilityCheck = session.IsStable;
+                // Motion gate (before OCR): skip OCR while the region is changing (user
+                // scrolling) and hide the overlay; OCR a clean frame once it settles.
+                // Reuses the per-session FrameDiffer that was previously unused.
+                tps.ShouldProcessFrame = session.ShouldProcessFrame;
             }
 
             // Step 5: Kick off the loop.

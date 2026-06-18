@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
@@ -11,7 +12,7 @@ using Translumo.Infrastructure.Language;
 
 namespace Translumo.OCR.WindowsOCR
 {
-    public class WindowsOCREngine : IOCREngine, IOcrTextBoundsProvider
+    public class WindowsOCREngine : IOCREngine, IOcrTextBoundsProvider, IOcrLineProvider
     {
         public Languages DetectionLanguage => LanguageDescriptor.Language;
         public virtual int Confidence => 5;
@@ -24,6 +25,13 @@ namespace Translumo.OCR.WindowsOCR
         // later call on this reused engine instance can't clobber an in-flight result.
         private Rectangle? _lastTextBounds;
         public Rectangle? LastTextBounds => _lastTextBounds;
+
+        // Per-line text + source-pixel bounds from the most recent GetTextLines call,
+        // in reading order. Snapshotted by the caller right after GetTextLines (same
+        // contract as _lastTextBounds). Empty when no text / no usable word boxes.
+        // Fully qualified to disambiguate from Windows.Media.Ocr.OcrLine.
+        private IReadOnlyList<Translumo.OCR.OcrLine> _lastLines = Array.Empty<Translumo.OCR.OcrLine>();
+        public IReadOnlyList<Translumo.OCR.OcrLine> LastLines => _lastLines;
 
         protected readonly OcrEngine MsEngine;
         protected readonly LanguageDescriptor LanguageDescriptor;
@@ -42,6 +50,7 @@ namespace Translumo.OCR.WindowsOCR
             if (MsEngine == null)
             {
                 _lastTextBounds = null;
+                _lastLines = Array.Empty<Translumo.OCR.OcrLine>();
                 return [];
             }
 
@@ -65,9 +74,35 @@ namespace Translumo.OCR.WindowsOCR
 
             _lastTextBounds = ComputeTextBounds(result, srcW, srcH, bitmap.Width, bitmap.Height);
 
-            return result.Lines
-                .Select(line => LanguageDescriptor.UseSpaceRemover ? line.Text.Replace(" ", string.Empty) : line.Text)
-                .ToArray();
+            // Build the per-line text array (the return value, unchanged) and, alongside
+            // it, per-line geometry for paragraph grouping. A line whose word boxes are
+            // unusable is still returned as text but omitted from the geometry list
+            // (it can't be positioned) — the single-blob path still sees its text.
+            var texts = new List<string>(result.Lines.Count);
+            var lines = new List<Translumo.OCR.OcrLine>(result.Lines.Count);
+            foreach (var line in result.Lines)
+            {
+                string text = LanguageDescriptor.UseSpaceRemover ? line.Text.Replace(" ", string.Empty) : line.Text;
+                texts.Add(text);
+
+                double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+                bool any = false;
+                foreach (var word in line.Words)
+                {
+                    var r = word.BoundingRect;
+                    if (r.Width <= 0 || r.Height <= 0) continue;
+                    any = true;
+                    if (r.X < minX) minX = r.X;
+                    if (r.Y < minY) minY = r.Y;
+                    if (r.X + r.Width > maxX) maxX = r.X + r.Width;
+                    if (r.Y + r.Height > maxY) maxY = r.Y + r.Height;
+                }
+                if (any && MapBoundsToSource(minX, minY, maxX, maxY, srcW, srcH, bitmap.Width, bitmap.Height) is { } b)
+                    lines.Add(new Translumo.OCR.OcrLine(text, b));
+            }
+
+            _lastLines = lines;
+            return texts.ToArray();
         }
 
         // Union of every recognized word's bounding box, mapped from the OCR image's

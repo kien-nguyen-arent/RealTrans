@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using RealTrans.Core.Stabilization;
 using Translumo.Infrastructure;
 using Translumo.Processing.Interfaces;
@@ -30,7 +31,8 @@ namespace RealTrans.Core.Bridge
         public void UnregisterRegion(string regionId) => _regionMeta.TryRemove(regionId, out _);
 
         public void SendRegionResult(string regionId, string sourceText, string translatedText, TimeSpan elapsed,
-            System.Drawing.Rectangle? textBounds)
+            System.Drawing.Rectangle? textBounds,
+            IReadOnlyList<(string Text, System.Drawing.Rectangle Rect)> blocks = null)
         {
             // Drop results for an unregistered region (session stopped) so a late
             // in-flight translation can't resurrect a dismissed overlay.
@@ -43,13 +45,30 @@ namespace RealTrans.Core.Bridge
                 (int)elapsed.TotalMilliseconds,
                 meta.RenderMode));
 
+            // Map each paragraph's region-local box to screen pixels with the same
+            // transform as the single union box. Drop any block whose box doesn't
+            // survive clamping; null when there are no usable blocks (single-blob path).
+            IReadOnlyList<OverlayBlock> overlayBlocks = null;
+            if (blocks != null && blocks.Count > 0)
+            {
+                var list = new List<OverlayBlock>(blocks.Count);
+                foreach (var (text, rect) in blocks)
+                {
+                    if (ToScreenTextRect(meta.Rect, rect) is { } screen)
+                        list.Add(new OverlayBlock(text, screen));
+                }
+                if (list.Count > 0)
+                    overlayBlocks = list;
+            }
+
             _bus.Publish(new OverlayUpdateMessage(
                 regionId,
                 meta.Rect,
                 meta.RenderMode,
                 translatedText,
                 seq,
-                ToScreenTextRect(meta.Rect, textBounds)));
+                ToScreenTextRect(meta.Rect, textBounds),
+                overlayBlocks));
         }
 
         /// <summary>
