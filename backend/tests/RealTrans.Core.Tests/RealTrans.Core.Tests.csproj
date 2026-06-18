@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- The linked sources carry XML-doc crefs to types we don't compile here
+         (e.g. IOCREngine); silence the resulting CS1574 doc warnings only. -->
+    <NoWarn>CS1574;CS1584</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!--
+    LayoutAnalyzer is pure logic (System + System.Drawing.Primitives + its OcrLine
+    input). We compile it (and the OcrLine definition) directly instead of referencing
+    Translumo.Processing, so these tests stay fast and don't drag in the OpenCvSharp /
+    Windows.Media.Ocr / WPF dependencies of the real assemblies.
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\legacy\src\Translumo.Processing\TextProcessing\LayoutAnalyzer.cs"
+             Link="Linked\LayoutAnalyzer.cs" />
+    <Compile Include="..\..\legacy\src\Translumo.OCR\IOcrLineProvider.cs"
+             Link="Linked\IOcrLineProvider.cs" />
+  </ItemGroup>
+
+</Project>

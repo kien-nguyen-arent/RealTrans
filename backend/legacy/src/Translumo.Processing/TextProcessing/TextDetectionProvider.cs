@@ -54,6 +54,12 @@ namespace Translumo.Processing.TextProcessing
                     // null). Captured immediately after GetTextLines so a later call
                     // on the same reused engine instance can't overwrite it.
                     TextBounds = (ocrEngine as IOcrTextBoundsProvider)?.LastTextBounds,
+                    // Group the per-line geometry into paragraphs for per-block
+                    // translation + overlay. Null when the engine reports no lines
+                    // (Tesseract/EasyOCR) — callers fall back to the single-blob path.
+                    Blocks = (ocrEngine as IOcrLineProvider)?.LastLines is { Count: > 0 } lines
+                        ? LayoutAnalyzer.GroupIntoBlocks(lines, _languageDescriptor.UseSpaceRemover)
+                        : null,
                 };
             }
             catch (Exception ex)

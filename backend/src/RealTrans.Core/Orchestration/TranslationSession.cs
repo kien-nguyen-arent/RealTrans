@@ -29,6 +29,9 @@ namespace RealTrans.Core.Orchestration
 
         private uint _lastApplied;
         private volatile bool _firstResultSeen;
+        // Tracks whether the previous frame was "moving" so OnFrameMotion publishes a
+        // hide exactly once per scroll (on the still→moving edge), not ~12×/second.
+        private bool _lastFrameMoving;
 
         public TranslationSession(
             string regionId,
@@ -71,9 +74,43 @@ namespace RealTrans.Core.Orchestration
         /// </summary>
         public bool IsStable(string text) => _stabilization.IsStable(text);
 
+        /// <summary>
+        /// Motion gate evaluated by TranslationProcessingService on the raw captured frame,
+        /// BEFORE OCR. Returns true only when the frame is "settled" (≈ identical to the
+        /// previous one), so OCR runs on a clean, stationary frame. While the region is
+        /// changing (the user scrolling), returns false to skip OCR and — on the first
+        /// moving frame — hides the overlay so a stale translation doesn't float over the
+        /// content sliding underneath it.
+        ///
+        /// FrameDiffer.IsSimilarToPrevious returns false on the very first frame and rewrites
+        /// its baseline every call, so when scrolling stops there's a one-iteration (~one
+        /// poll) delay before the now-stationary frame matches its predecessor and OCR fires.
+        /// That delay is desirable: it guarantees OCR sees a fully-settled frame, not the
+        /// first half-painted one.
+        /// </summary>
+        public bool ShouldProcessFrame(byte[] frame)
+        {
+            bool settled = _frameDiffer.IsSimilarToPrevious(frame);
+            OnFrameMotion(moving: !settled);
+            return settled;
+        }
+
+        // Publishes a hide exactly once on the still→moving transition. The matching
+        // "show" is NOT published here — it rides the next OverlayUpdateMessage when the
+        // frame settles, so the overlay reappears already carrying fresh text.
+        private void OnFrameMotion(bool moving)
+        {
+            if (moving == _lastFrameMoving) return;
+            _lastFrameMoving = moving;
+            if (moving)
+                _bus.Publish(new OverlayVisibilityMessage(RegionId, Visible: false));
+        }
+
         public void Start()
         {
             _stabilization.Reset();
+            _frameDiffer.Reset();
+            _lastFrameMoving = false;
             _holdTimer.Cancel();
             _firstResultSeen = false;
             _noResultWatchdog.Start();

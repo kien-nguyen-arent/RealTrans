@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using Translumo.Infrastructure.Language;
 using Translumo.OCR;
 
@@ -22,6 +23,15 @@ namespace Translumo.Processing.TextProcessing
         /// report geometry. Used to position the overlay tightly over the original.
         /// </summary>
         public System.Drawing.Rectangle? TextBounds { get; set; }
+
+        /// <summary>
+        /// Per-paragraph blocks (joined text + region-local pixel box) when the source
+        /// engine reports per-line geometry; null otherwise. When present, each block is
+        /// translated and rendered as its own overlay (Google-Translate style); when
+        /// null, the single-blob <see cref="Text"/> path is used. Does not affect
+        /// scoring/ranking — <see cref="CompareTo"/> still uses <see cref="ValidatedText"/>.
+        /// </summary>
+        public IReadOnlyList<LayoutBlock> Blocks { get; set; }
 
         private const float LONG_SCORE_THRESHOLD = 3.81f;
         private const float EQUAL_TOLERANCE = 0.001f;

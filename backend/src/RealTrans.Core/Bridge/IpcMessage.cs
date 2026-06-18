@@ -63,7 +63,12 @@ namespace RealTrans.Core.Bridge
         // present, OverlayManager positions the overlay here (over the original
         // text) instead of across the whole capture Rect. Null when the OCR engine
         // reports no geometry — overlay then falls back to Rect.
-        RectDto? TextRect = null) : OutboundMessage
+        RectDto? TextRect = null,
+        // Per-paragraph translated blocks (text + screen-pixel box), in reading order.
+        // When present, OverlayManager renders one overlay per block placed over its
+        // source paragraph. Null/empty ⇒ single-block path using TranslatedText +
+        // TextRect/Rect (engines without per-line geometry, e.g. Tesseract/EasyOCR).
+        IReadOnlyList<OverlayBlock>? Blocks = null) : OutboundMessage
     {
         public override string Type => "overlay:update";
     }
@@ -76,6 +81,20 @@ namespace RealTrans.Core.Bridge
     public record OverlayCloseMessage(string RegionId) : OutboundMessage
     {
         public override string Type => "overlay:close";
+    }
+
+    /// <summary>
+    /// Toggles overlay visibility WITHOUT destroying the window. Published by the
+    /// session on motion onset (Visible=false) so the overlay stops "floating" over
+    /// content that's scrolling underneath it. Visibility is restored implicitly by
+    /// the next <see cref="OverlayUpdateMessage"/> once the frame settles, so the
+    /// overlay reappears already carrying fresh text (no stale-text flash). Distinct
+    /// from <see cref="TranslationClearedMessage"/>, whose 600 ms hold-timer
+    /// semantics OverlayManager deliberately ignores.
+    /// </summary>
+    public record OverlayVisibilityMessage(string RegionId, bool Visible) : OutboundMessage
+    {
+        public override string Type => "overlay:visibility";
     }
 
     public record SelectionCommittedMessage(RectDto Rect) : OutboundMessage
@@ -180,4 +199,11 @@ namespace RealTrans.Core.Bridge
         bool Pinnable);
 
     public record RectDto(int X, int Y, int W, int H);
+
+    /// <summary>
+    /// One translated paragraph + its screen-pixel box. Carried by
+    /// <see cref="OverlayUpdateMessage.Blocks"/> so OverlayManager can render one
+    /// overlay per paragraph, each placed over its source text.
+    /// </summary>
+    public record OverlayBlock(string Text, RectDto Rect);
 }

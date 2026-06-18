@@ -49,6 +49,14 @@ namespace Translumo.Processing
         /// </summary>
         public Func<string, bool> StabilityCheck { get; set; }
 
+        /// <summary>
+        /// Optional motion gate evaluated on the raw captured frame, BEFORE OCR. Return false to
+        /// skip this iteration entirely (no OCR, no cache touch) — used by RealTrans to suppress
+        /// OCR while the region is changing (e.g. the user is scrolling) and only run a clean OCR
+        /// once the frame settles. Unset (null) ⇒ the loop runs exactly as before.
+        /// </summary>
+        public Func<byte[], bool> ShouldProcessFrame { get; set; }
+
         private readonly ICapturerFactory _capturerFactory;
         private readonly IChatTextMediator _chatTextMediator;
         private readonly OcrEnginesFactory _enginesFactory;
@@ -223,6 +231,16 @@ namespace Translumo.Processing
                         byte[] screenshot = CaptureArea.IsEmpty
                             ? _capturer.CaptureScreen()
                             : _capturer.CaptureScreen(CaptureArea);
+                        // Motion gate: skip OCR entirely while the frame is still changing
+                        // (e.g. the user is scrolling). Only a settled frame is worth OCRing —
+                        // this avoids reading blurry, half-scrolled text and the overlay churn
+                        // that follows. Costs only the capture + a cheap byte-diff per moving
+                        // frame. When the hook is unset (null), the loop behaves exactly as before.
+                        if (ShouldProcessFrame != null && !ShouldProcessFrame(screenshot))
+                        {
+                            lastIterationType = IterationType.Short;
+                            continue;
+                        }
                         var primaryDetected = _textProvider.GetText(primaryOcr, screenshot);
                         lastIterationType = IterationType.Short;
                         if (primaryDetected.ValidityScore == 0)
@@ -279,7 +297,7 @@ namespace Translumo.Processing
 
                         sequentialText = false;
                         //resultLogger.LogResults(detectedResults.Select(res => res.Result), screenshot);
-                        activeTranslationTasks.Add(TranslateTextAsync(bestDetected.Text, iterationId, bestDetected.TextBounds));
+                        activeTranslationTasks.Add(TranslateTextAsync(bestDetected.Text, iterationId, bestDetected.TextBounds, bestDetected.Blocks));
                     }
                 }
                 catch (CaptureException ex)
@@ -340,7 +358,7 @@ namespace Translumo.Processing
                     // TODO: sometimes one of task (win tts) is not complete long time and translation is not working
                     Task.WaitAll(taskResults);
                     TextDetectionResult bestDetected = GetBestDetectionResult(taskResults, 3);
-                    translationTask = TranslateTextAsync(bestDetected.Text, Guid.NewGuid(), bestDetected.TextBounds);
+                    translationTask = TranslateTextAsync(bestDetected.Text, Guid.NewGuid(), bestDetected.TextBounds, bestDetected.Blocks);
                 }
 
                 translationTask.Wait(TRANSLATION_TIMEOUT_MS);
@@ -362,16 +380,43 @@ namespace Translumo.Processing
             }
         }
 
-        private async Task TranslateTextAsync(string text, Guid iterationId, Rectangle? textBounds)
+        private async Task TranslateTextAsync(string text, Guid iterationId, Rectangle? textBounds,
+            IReadOnlyList<LayoutBlock> blocks)
         {
             var started = DateTime.UtcNow;
-            var translation = await _translator.TranslateTextAsync(text);
+
+            string translation;
+            IReadOnlyList<(string Text, Rectangle Rect)> translatedBlocks = null;
+
+            if (blocks != null && blocks.Count > 0)
+            {
+                // Translate each paragraph on its own so sentences stay coherent and each
+                // keeps its geometry for placement. Order is preserved 1:1 with blocks.
+                // (LayoutAnalyzer already caps the count via LayoutOptions.MaxBlocks, so
+                // the translate fan-out per settled frame is bounded.)
+                var translations = await Task.WhenAll(blocks.Select(b => _translator.TranslateTextAsync(b.Text)));
+                var mapped = new List<(string Text, Rectangle Rect)>(translations.Length);
+                for (int i = 0; i < translations.Length; i++)
+                {
+                    if (!string.IsNullOrWhiteSpace(translations[i]))
+                        mapped.Add((translations[i], blocks[i].Bounds));
+                }
+                translatedBlocks = mapped;
+                translation = string.Join(Environment.NewLine, mapped.Select(b => b.Text));
+            }
+            else
+            {
+                translation = await _translator.TranslateTextAsync(text);
+            }
+
+            // Dedup the OUTPUT once on the joined translation — same single-string
+            // semantics as before, so per-block splitting doesn't change cache behavior.
             if (!string.IsNullOrWhiteSpace(translation) && !_textResultCacheService.IsTranslatedCached(translation, iterationId))
             {
                 var elapsed = DateTime.UtcNow - started;
                 Interlocked.Exchange(ref _lastTranslatedTextTicks, DateTime.UtcNow.Ticks);
                 if (_chatTextMediator is Interfaces.ITranslationResultSink sink && !string.IsNullOrEmpty(RegionId))
-                    sink.SendRegionResult(RegionId, text, translation, elapsed, textBounds);
+                    sink.SendRegionResult(RegionId, text, translation, elapsed, textBounds, translatedBlocks);
                 else
                     _chatTextMediator.SendText(translation, true);
                 _ttsEngine.SpeechText(translation);
