@@ -391,10 +391,16 @@ namespace RealTrans.Core.Orchestration
         {
             if (_sessions.TryRemove(regionId, out var session))
             {
-                _sink.UnregisterRegion(regionId);
                 session.Dispose();
             }
+            // Always unregister + close the overlay (even if the session was already
+            // removed): this is what makes ESC/Stop actually dismiss the Ghost/Replace
+            // overlay — it was previously only closed on a render-mode switch or app
+            // teardown, so it lingered on screen. Unregistering first also makes the
+            // sink drop any late in-flight result instead of re-driving a dead overlay.
+            _sink.UnregisterRegion(regionId);
             _captureIndicator.Hide(regionId);
+            _bus.Publish(new OverlayCloseMessage(regionId));
         }
 
         public void StopAllSessions()

@@ -52,7 +52,7 @@ namespace RealTrans.Overlay.Modes
         public override void PositionAt(double x, double y, double width, double height)
         {
             if (_textBlock != null)
-                _textBlock.FontSize = System.Math.Clamp(height * 0.72, 15, 34);
+                _textBlock.FontSize = System.Math.Clamp(height * 0.6, 12, 24);
             Left = x;
             Top = y;
             Width = width;

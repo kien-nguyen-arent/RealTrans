@@ -32,9 +32,11 @@ namespace RealTrans.Core.Bridge
         public void SendRegionResult(string regionId, string sourceText, string translatedText, TimeSpan elapsed,
             System.Drawing.Rectangle? textBounds)
         {
-            uint seq = _sequencer.Next();
+            // Drop results for an unregistered region (session stopped) so a late
+            // in-flight translation can't resurrect a dismissed overlay.
             if (!_regionMeta.TryGetValue(regionId, out var meta))
-                meta = (new RectDto(0, 0, 0, 0), "replace");
+                return;
+            uint seq = _sequencer.Next();
 
             _bus.Publish(new TranslationResultMessage(
                 regionId, sourceText, translatedText,

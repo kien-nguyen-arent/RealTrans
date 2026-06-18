@@ -68,6 +68,16 @@ namespace RealTrans.Core.Bridge
         public override string Type => "overlay:update";
     }
 
+    /// <summary>
+    /// Tells OverlayManager to close the overlay window for a region when its
+    /// session stops. Overlay windows are click-through, so the user can't dismiss
+    /// them — without this they linger on screen after Stop/ESC.
+    /// </summary>
+    public record OverlayCloseMessage(string RegionId) : OutboundMessage
+    {
+        public override string Type => "overlay:close";
+    }
+
     public record SelectionCommittedMessage(RectDto Rect) : OutboundMessage
     {
         public override string Type => "selection:committed";

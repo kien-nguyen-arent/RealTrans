@@ -47,6 +47,21 @@ namespace RealTrans.Overlay
             // never owned the feed pane).
             if (msg is OverlayUpdateMessage update)
                 Application.Current?.Dispatcher.Invoke(() => ApplyUpdate(update));
+            else if (msg is OverlayCloseMessage close)
+                Application.Current?.Dispatcher.Invoke(() => CloseRegion(close.RegionId));
+        }
+
+        // Closes and forgets the overlay window for a region when its session stops.
+        // Without this, Ghost/Replace windows (click-through, so the user can't
+        // dismiss them) lingered on screen after Stop/ESC.
+        private void CloseRegion(string regionId)
+        {
+            if (_windows.TryRemove(regionId, out var window))
+            {
+                try { window.Close(); }
+                catch (Exception ex) { _logger.LogDebug(ex, "Closing overlay window for {Region} on session stop", regionId); }
+            }
+            _lastApplied.TryRemove(regionId, out _);
         }
 
         private void ApplyUpdate(OverlayUpdateMessage update)
