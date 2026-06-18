@@ -17,27 +17,37 @@ namespace RealTrans.Overlay.Modes
             _textBlock = new TextBlock
             {
                 Foreground = Brushes.White,
-                FontSize = 28,                       // upper bound; the Viewbox scales down to fit
+                FontSize = 20,
                 FontWeight = FontWeights.SemiBold,
-                TextWrapping = TextWrapping.NoWrap,
+                TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(12, 6, 12, 6),
             };
 
-            // Uniform + DownOnly: shrink the translation to fit the (tight) text box
-            // matching the original's footprint, never enlarging past the base size.
-            var fit = new Viewbox
-            {
-                Child = _textBlock,
-                Stretch = Stretch.Uniform,
-                StretchDirection = StretchDirection.DownOnly,
-                Margin = new Thickness(10, 6, 10, 6),
-            };
-
+            // Wrap at the original text's width and grow the panel's HEIGHT to fit,
+            // instead of shrinking the font into a tight box (which made a longer
+            // translation, e.g. JP→VI, microscopic). Width + font set in PositionAt.
+            SizeToContent = SizeToContent.Height;
+            MinWidth = 140;
             Content = new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(215, 80, 60, 200)), // violet tint
-                Child = fit,
+                Child = _textBlock,
             };
+        }
+
+        // Pin top-left + width to the OCR-detected text box, size the font to the
+        // original line height (clamped readable), and let SizeToContent grow the
+        // height to fit the wrapped translation.
+        public override void PositionAt(double x, double y, double width, double height)
+        {
+            if (_textBlock != null)
+                _textBlock.FontSize = System.Math.Clamp(height * 0.72, 15, 34);
+            Left = x;
+            Top = y;
+            Width = width;
         }
 
         public override void UpdateTranslation(string translatedText, string renderMode)

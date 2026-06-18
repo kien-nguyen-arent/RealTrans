@@ -44,7 +44,7 @@ namespace RealTrans.Overlay
             Win32OverlayHelper.ExcludeFromCapture(this);
         }
 
-        public void PositionAt(double x, double y, double width, double height)
+        public virtual void PositionAt(double x, double y, double width, double height)
         {
             Left = x;
             Top = y;
