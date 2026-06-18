@@ -180,7 +180,7 @@ const AppearancePane = ({ renderMode, onRenderMode }) => (
 // Read-only: rebinding (hotkey:reassign) has no backend yet.
 const REAL_HOTKEYS = [
   { name: "Open command palette",       keys: ["Alt", "Q"] },
-  { name: "Toggle selection / overlay", keys: ["~"] },
+  { name: "Start / stop translating", keys: ["~"] },
   { name: "Dismiss topmost surface",    keys: ["Esc"] },
 ];
 

@@ -122,8 +122,15 @@ const App = () => {
     });
 
     RealTransBridge.on("hotkey:fired", ({ action }) => {
-      if (action === "openPalette")   setPaletteOpen(true);
-      if (action === "toggleOverlay") handleStartSelectionRef.current?.();
+      if (action === "openPalette") setPaletteOpen(true);
+      if (action === "toggleOverlay") {
+        // Global ~ hotkey toggles translation. When a session is active, STOP it —
+        // this works even while the app is minimized/unfocused (the keydown-based
+        // ESC handler can't, since it needs window focus). Otherwise start region
+        // selection.
+        if (overlayActiveRef.current) handleStopRef.current?.();
+        else handleStartSelectionRef.current?.();
+      }
     });
 
     // C# selection window committed a screen rect → start session

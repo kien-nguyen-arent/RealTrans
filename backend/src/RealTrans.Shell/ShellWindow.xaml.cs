@@ -43,6 +43,8 @@ namespace RealTrans.Shell
 
             _bus.OutboundReady += OnOutboundMessage;
             _bus.SelectionOpen += OnSelectionOpen;
+            _bus.SessionStart  += OnSessionStarted;
+            _bus.SessionStop   += OnSessionStopped;
 
             Loaded += OnLoaded;
         }
@@ -127,10 +129,12 @@ namespace RealTrans.Shell
 
                 sel = new SelectionAreaWindow();
                 bool resolved = false;
+                bool committed = false;
 
                 sel.Committed += rect =>
                 {
                     resolved = true;
+                    committed = true;
                     _bus.Publish(new SelectionCommittedMessage(rect));
                 };
                 sel.SelectionCancelled += () =>
@@ -147,7 +151,16 @@ namespace RealTrans.Shell
                     {
                         _bus.Publish(new SelectionCancelledMessage());
                     }
-                    Show();
+                    // Only restore the app when the user did NOT commit a region. A
+                    // committed selection starts translation; OnSessionStarted then
+                    // decides visibility by render mode (inline → front; ghost/replace
+                    // → minimized), so the app no longer pops up over the user's
+                    // content after an overlay-mode capture.
+                    if (!committed)
+                    {
+                        Show();
+                        WindowState = WindowState.Normal;
+                    }
                 };
 
                 sel.Show();
@@ -162,6 +175,50 @@ namespace RealTrans.Shell
                 _bus.Publish(new SelectionCancelledMessage());
                 if (!IsVisible) Show();
             }
+        }
+
+        // After a committed selection starts translation, decide how this window
+        // behaves by render mode. Overlay modes (replace/ghost) paint results on
+        // screen, so minimize the app to the taskbar — out of the user's way, still
+        // reachable, and the global ~ hotkey can stop translation without focusing
+        // it. Inline mode shows results in this window, so bring it to the front.
+        private void OnSessionStarted(object? sender, InboundMessage msg)
+        {
+            var mode = "inline";
+            try
+            {
+                if (msg.Payload.TryGetProperty("renderMode", out var m)
+                    && m.ValueKind == JsonValueKind.String)
+                    mode = m.GetString() ?? "inline";
+            }
+            catch { /* fall back to inline */ }
+
+            bool inline = string.Equals(mode, "inline", StringComparison.OrdinalIgnoreCase);
+            Dispatcher.Invoke(() =>
+            {
+                Show();
+                if (inline)
+                {
+                    WindowState = WindowState.Normal;
+                    Activate();
+                }
+                else
+                {
+                    WindowState = WindowState.Minimized;
+                }
+            });
+        }
+
+        // Translation stopped (Stop button, ESC, or the global ~ toggle): restore the
+        // window so the user can see it stopped and start again.
+        private void OnSessionStopped(object? sender, InboundMessage msg)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+            });
         }
 
         // ── Outbound: C# → JS ─────────────────────────────────────────────────
@@ -199,6 +256,8 @@ namespace RealTrans.Shell
             base.OnClosed(e);
             _bus.OutboundReady -= OnOutboundMessage;
             _bus.SelectionOpen -= OnSelectionOpen;
+            _bus.SessionStart  -= OnSessionStarted;
+            _bus.SessionStop   -= OnSessionStopped;
         }
     }
 }
